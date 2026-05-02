@@ -225,12 +225,6 @@ def filmeto_serci(
                 info(f"   [dim]{' | '.join(parts)}[/dim]")
 
 
-@filmeto.command("ludi")
-def filmeto_ludi(url: str) -> None:
-    """Play a video."""
-    info(f"[dim]TODO: implement filmeto ludi {url}[/dim]")
-
-
 @filmeto.command("eljuti")
 def filmeto_eljuti(
     url: Optional[str] = typer.Argument(None, help="YouTube URL to download. Not needed when using --csv-dosiero."),

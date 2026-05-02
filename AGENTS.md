@@ -162,7 +162,7 @@ Results are cached in SQLite for offline search via `--local` flag.
 | Feature | Issue | Priority |
 |---------|-------|----------|
 | Cookie/browser auth | ✅ [#6](https://github.com/Ron-RONZZ-org/A-medio/issues/6) | Done |
-| `ludi` (play video in temp dir) | [#7](https://github.com/Ron-RONZZ-org/A-medio/issues/7) | Medium |
+| `ludi` (play video) | ❌ [#7](https://github.com/Ron-RONZZ-org/A-medio/issues/7) | Won't do — users can ``eljuti --output /tmp && xdg-open`` |
 | Download size estimation | ✅ [#8](https://github.com/Ron-RONZZ-org/A-medio/issues/8) | Done |
 | Search extras (`--aldona`, `--playlistoj`, `--limo`) | ✅ [#9](https://github.com/Ron-RONZZ-org/A-medio/issues/9) | Done |
 
