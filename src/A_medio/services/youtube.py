@@ -12,7 +12,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Generator
 
-from A import error, info, tr, tr_multi
+from A import error, info, success, tr, tr_multi
 from A.core.paths import data_dir
 from A.core.service import CRUDService
 from A.data.search import FTSConfig
@@ -788,6 +788,45 @@ class BatchResult:
     error: str | None = None
 
 
+@dataclass
+class EstimateResult:
+    """Result of a download size estimation.
+
+    Attributes:
+        count: Number of items (videos/tracks).
+        total_bytes: Estimated total size in bytes.
+        items: Per-item details (title, size).
+    """
+
+    count: int
+    total_bytes: int
+    items: list[dict[str, Any]] = field(default_factory=list)
+
+    @property
+    def total_size_str(self) -> str:
+        """Human-readable total size."""
+        return _format_size(self.total_bytes)
+
+
+def _format_size(num_bytes: int) -> str:
+    """Format byte count to a human-readable string.
+
+    Args:
+        num_bytes: Size in bytes.
+
+    Returns:
+        e.g. ``"150.2 MB"``, ``"1.5 GB"``, or ``"--"`` for zero.
+    """
+    if num_bytes <= 0:
+        return "--"
+    size = float(num_bytes)
+    for unit in ("B", "KB", "MB", "GB", "TB"):
+        if size < 1024.0:
+            return f"{size:.1f} {unit}"
+        size /= 1024.0
+    return f"{size:.1f} PB"
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # YouTube service
 # ──────────────────────────────────────────────────────────────────────────────
@@ -1091,6 +1130,7 @@ class YouTubeService(MediaService):
                 - subtitles: Subtitle spec (auto, all, or langs).
                 - cookies: Path to cookies.txt file.
                 - cookies_from_browser: Browser name or ``"browser:profile"``.
+                - playlist_end: Max number of items from a playlist.
 
         Returns:
             List of paths to downloaded files (empty if failed).
@@ -1120,6 +1160,8 @@ class YouTubeService(MediaService):
             "outtmpl": str(output_dir / "%(title).80s [%(id)s].%(ext)s"),
             "ignoreerrors": True,
         }
+        if opts.get("playlist_end") is not None:
+            ydl_opts["playlistend"] = int(opts["playlist_end"])
         ydl_opts.update(build_subtitle_opts(opts.get("subtitles")))
         ydl_opts.update(build_cookie_opts(
             cookies=opts.get("cookies"),
@@ -1156,6 +1198,98 @@ class YouTubeService(MediaService):
             ))
 
         return created
+
+    # ── estimate ─────────────────────────────────────────────────────────
+
+    def estimate(
+        self,
+        url: str,
+        **opts: Any,
+    ) -> EstimateResult | None:
+        """Estimate download size without downloading.
+
+        Runs a dry-run ``extract_info`` with the same format options as
+        :meth:`download` and sums up file sizes.
+
+        Args:
+            url: YouTube URL to estimate.
+            **opts: Same options as :meth:`download` (format, cookies, etc.).
+
+        Returns:
+            :class:`EstimateResult`, or ``None`` if estimation fails.
+        """
+        if not self.is_available():
+            error(tr_multi(
+                "yt-dlp ne estas instalita.",
+                "yt-dlp is not installed.",
+                "yt-dlp n'est pas installé.",
+            ))
+            return None
+
+        format_sel = build_format_selector(
+            resolution=opts.get("resolution"),
+            audio_only=opts.get("audio_only", False),
+            video_only=opts.get("video_only", False),
+            audio_bitrate=opts.get("audio_bitrate"),
+        )
+
+        ydl_opts: dict[str, Any] = {
+            "quiet": True,
+            "no_warnings": True,
+            "format": format_sel,
+            "skip_download": True,
+            "ignoreerrors": True,
+        }
+        if opts.get("playlist_end") is not None:
+            ydl_opts["playlistend"] = int(opts["playlist_end"])
+        ydl_opts.update(build_cookie_opts(
+            cookies=opts.get("cookies"),
+            cookies_from_browser=opts.get("cookies_from_browser"),
+        ))
+
+        try:
+            with self._wrapper.create_ydl(ydl_opts) as ydl:
+                info = ydl.extract_info(url, download=False)
+        except _get_download_error() as exc:
+            error(tr_multi(
+                f"Takso fiaskis: {exc}",
+                f"Estimation failed: {exc}",
+                f"Estimation échouée: {exc}",
+            ))
+            return None
+
+        # Collect items (playlist entries or single video)
+        items_list: list[dict[str, Any]] = []
+        entries = info.get("entries") if isinstance(info, dict) else None
+        if entries:
+            for entry in entries:
+                if isinstance(entry, dict):
+                    items_list.append(entry)
+        elif isinstance(info, dict):
+            items_list.append(info)
+
+        total = 0
+        item_details: list[dict[str, Any]] = []
+        for item in items_list:
+            filesize = (
+                item.get("filesize")
+                or item.get("filesize_approx")
+                or 0
+            )
+            if isinstance(filesize, (int, float)):
+                total += int(filesize)
+            item_details.append({
+                "title": item.get("title", ""),
+                "duration": item.get("duration", 0),
+                "filesize": int(filesize) if filesize else 0,
+                "url": item.get("webpage_url") or item.get("url", ""),
+            })
+
+        return EstimateResult(
+            count=len(item_details),
+            total_bytes=total,
+            items=item_details,
+        )
 
     def batch_download(
         self,
@@ -1223,6 +1357,7 @@ __all__ = [
     "YouTubeVideo",
     "YtDlpWrapper",
     "BatchResult",
+    "EstimateResult",
     "get_youtube_service",
     "build_format_selector",
     "build_subtitle_opts",

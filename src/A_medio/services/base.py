@@ -79,3 +79,20 @@ class MediaService(ABC):
             List of result objects (one per URL).
         """
         ...
+
+    @abstractmethod
+    def estimate(
+        self,
+        url: str,
+        **opts: Any,
+    ) -> Any | None:
+        """Estimate download size without downloading.
+
+        Args:
+            url: URL of the media to estimate.
+            **opts: Same options as :meth:`download`.
+
+        Returns:
+            An estimate result object, or ``None`` on failure.
+        """
+        ...

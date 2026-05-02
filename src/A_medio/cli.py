@@ -137,6 +137,8 @@ def filmeto_serci(
     filter_field: Optional[str] = typer.Option(None, "--filter", "-f", help="Filter field (title, description, author)"),
     regex: Optional[str] = typer.Option(None, "--regex", "-r", help="Regex pattern to match"),
     local_only: bool = typer.Option(False, "--local", "-l", help="Search local cache only"),
+    aldona: bool = typer.Option(False, "--aldona", "-a", help="Show extra info (views, subscribers)."),
+    playlistoj: bool = typer.Option(False, "--playlistoj", "-P", help="Search playlists instead of videos."),
     kuketoj: Optional[str] = typer.Option(None, "--kuketoj", help="Path to cookies.txt for YouTube authentication."),
     kuketoj_de_retumilo: Optional[str] = typer.Option(
         None, "--kuketoj-de-retumilo",
@@ -153,11 +155,14 @@ def filmeto_serci(
 
     If search fails (e.g. YouTube blocks unauthenticated requests), try
     --kuketoj or --kuketoj-de-retumilo to provide authentication cookies.
+    Use --aldona for extra details or --playlistoj to find playlists.
 
     Examples:
         medio filmeto serci "python tutorial"
         medio filmeto serci "music" --filter author --regex "official"
         medio filmeto serci "news" --local
+        medio filmeto serci "news" --aldona
+        medio filmeto serci "python" --playlistoj
         medio filmeto serci "tutorial" --kuketoj /tmp/cookies.txt
         medio filmeto serci "music" --kuketoj-de-retumilo floorp
     """
@@ -184,7 +189,9 @@ def filmeto_serci(
             opts["cookies"] = kuketoj
         if kuketoj_de_retumilo:
             opts["cookies_from_browser"] = kuketoj_de_retumilo
-        results = youtube.search(query, **opts)
+        # Playlist search: append " playlist" to seed
+        search_query = f"{query} playlist" if playlistoj else query
+        results = youtube.search(search_query, **opts)
 
     if not results:
         info(tr_multi(
@@ -201,6 +208,21 @@ def filmeto_serci(
         url = video.get("url", "")
         info(f"{i}. {title} [dim]({author})[/dim]")
         info(f"   {url}")
+        if aldona:
+            views = video.get("view_count", "")
+            subs = video.get("channel_follower_count", "")
+            duration = video.get("duration", 0)
+            parts: list[str] = []
+            if views:
+                parts.append(f"Views: {views}")
+            if subs:
+                parts.append(f"Subs: {subs}")
+            if duration:
+                minutes = duration // 60
+                seconds = duration % 60
+                parts.append(f"Dur: {minutes}:{seconds:02d}")
+            if parts:
+                info(f"   [dim]{' | '.join(parts)}[/dim]")
 
 
 @filmeto.command("ludi")
@@ -220,6 +242,11 @@ def filmeto_eljuti(
     subtitles: Optional[str] = typer.Option(
         None, "--subtitoloj", "--sub",
         help="Subtitles: 'auto', 'all', or comma-separated language codes (e.g. 'eo,en,fr').",
+    ),
+    taksi: bool = typer.Option(False, "--taksi", "-t", help="Estimate size only, do not download."),
+    limo: Optional[int] = typer.Option(
+        None, "--limo", "-lo",
+        help="Max items to download from a playlist.",
     ),
     kuketoj: Optional[str] = typer.Option(None, "--kuketoj", help="Path to cookies.txt for YouTube authentication."),
     kuketoj_de_retumilo: Optional[str] = typer.Option(
@@ -243,6 +270,9 @@ def filmeto_eljuti(
 
     Provide a single URL as argument, or use --csv-dosiero for batch download.
 
+    Use --taksi to preview estimated size before downloading.
+    Use --limo to limit how many items are fetched from a playlist.
+
     If downloads fail due to YouTube blocking, try --kuketoj or --kuketoj-de-retumilo.
 
     Examples:
@@ -250,6 +280,8 @@ def filmeto_eljuti(
         medio filmeto eljuti https://youtu.be/... --output /path/to/dir
         medio filmeto eljuti https://youtu.be/... --audio
         medio filmeto eljuti https://youtu.be/... --difino 1080 --subtitoloj eo,en
+        medio filmeto eljuti https://youtu.be/... --taksi
+        medio filmeto eljuti https://youtu.be/... --limo 5
         medio filmeto eljuti https://youtu.be/... --kuketoj /tmp/cookies.txt
         medio filmeto eljuti --csv-dosiero elsutoj.csv
     """
@@ -285,6 +317,8 @@ def filmeto_eljuti(
             initial["cookies"] = kuketoj
         if kuketoj_de_retumilo is not None:
             initial["cookies_from_browser"] = kuketoj_de_retumilo
+        if limo is not None:
+            initial["playlist_end"] = limo
 
         try:
             specs = parse_csv_rows(csv_dosiero, initial_state=initial)
@@ -346,6 +380,28 @@ def filmeto_eljuti(
         download_opts["cookies"] = kuketoj
     if kuketoj_de_retumilo is not None:
         download_opts["cookies_from_browser"] = kuketoj_de_retumilo
+    if limo is not None:
+        download_opts["playlist_end"] = limo
+
+    # ── Estimate mode ──────────────────────────────────────────────────────
+    if taksi:
+        estimate = youtube.estimate(url, **download_opts)
+        if estimate is None:
+            return
+        info(tr_multi(
+            f"Taksita: {estimate.count} dosiero(j), ~{estimate.total_size_str}",
+            f"Estimated: {estimate.count} file(s), ~{estimate.total_size_str}",
+            f"Estimé : {estimate.count} fichier(s), ~{estimate.total_size_str}",
+        ))
+        for item in estimate.items:
+            title = item.get("title", "")
+            fs = int(item.get("filesize", 0))
+            if fs > 0:
+                size_str = f"{fs / 1024 / 1024:.1f} MB" if fs > 1024 * 1024 else f"{fs / 1024:.1f} KB"
+            else:
+                size_str = "--"
+            info(f"  {title} [dim]({size_str})[/dim]")
+        return
 
     files = youtube.download(url, **download_opts)
 

@@ -1133,3 +1133,232 @@ class TestCLICookieFlags:
         assert result.exit_code == 0
         assert "Kuketoj helpo" in result.stdout
         assert "--kuketoj" in result.stdout
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Download estimation (#8)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestEstimate:
+    """YouTubeService.estimate() — download size estimation."""
+
+    def test_estimate_returns_none_when_unavailable(self) -> None:
+        """estimate() returns None when yt-dlp not available."""
+        service = YouTubeService()
+        with patch.object(service, "is_available", return_value=False):
+            result = service.estimate("https://youtu.be/abc")
+            assert result is None
+
+    def test_estimate_single_video(self) -> None:
+        """estimate() returns count and size for a single video."""
+        service = YouTubeService()
+        with (
+            patch.object(service, "is_available", return_value=True),
+            patch.object(service._wrapper, "create_ydl") as mock_create,
+        ):
+            mock_ydl = MagicMock()
+            mock_ydl.extract_info.return_value = {
+                "id": "abc",
+                "title": "Test Video",
+                "filesize": 50_000_000,
+                "duration": 300,
+            }
+            mock_create.return_value.__enter__.return_value = mock_ydl
+
+            result = service.estimate("https://youtu.be/abc")
+
+            assert result is not None
+            assert result.count == 1
+            assert result.total_bytes == 50_000_000
+            assert "MB" in result.total_size_str
+
+    def test_estimate_playlist(self) -> None:
+        """estimate() sums sizes across playlist entries."""
+        service = YouTubeService()
+        with (
+            patch.object(service, "is_available", return_value=True),
+            patch.object(service._wrapper, "create_ydl") as mock_create,
+        ):
+            mock_ydl = MagicMock()
+            mock_ydl.extract_info.return_value = {
+                "entries": [
+                    {"id": "a", "title": "V1", "filesize": 10_000_000},
+                    {"id": "b", "title": "V2", "filesize": 20_000_000},
+                    {"id": "c", "title": "V3"},  # no filesize
+                ],
+            }
+            mock_create.return_value.__enter__.return_value = mock_ydl
+
+            result = service.estimate("https://youtu.be/playlist?list=abc")
+
+            assert result is not None
+            assert result.count == 3
+            assert result.total_bytes == 30_000_000
+
+    def test_estimate_with_format_opts(self) -> None:
+        """estimate() passes format options to yt-dlp."""
+        service = YouTubeService()
+        with (
+            patch.object(service, "is_available", return_value=True),
+            patch.object(service._wrapper, "create_ydl") as mock_create,
+        ):
+            mock_ydl = MagicMock()
+            mock_ydl.extract_info.return_value = {"id": "abc", "title": "T"}
+            mock_create.return_value.__enter__.return_value = mock_ydl
+
+            service.estimate(
+                "https://youtu.be/abc",
+                resolution=720,
+                audio_only=True,
+                playlist_end=5,
+            )
+
+            call_opts = mock_create.call_args[0][0]
+            assert call_opts.get("format") == "bestaudio"
+            assert call_opts.get("playlistend") == 5
+
+    def test_estimate_uses_filesize_approx(self) -> None:
+        """estimate() falls back to filesize_approx."""
+        service = YouTubeService()
+        with (
+            patch.object(service, "is_available", return_value=True),
+            patch.object(service._wrapper, "create_ydl") as mock_create,
+        ):
+            mock_ydl = MagicMock()
+            mock_ydl.extract_info.return_value = {
+                "id": "abc",
+                "title": "T",
+                "filesize_approx": 100_000_000,
+            }
+            mock_create.return_value.__enter__.return_value = mock_ydl
+
+            result = service.estimate("https://youtu.be/abc")
+            assert result is not None
+            assert result.total_bytes == 100_000_000
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Search extras (#9)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestCLISearchExtras:
+    """CLI --aldona, --playlistoj flags on serci."""
+
+    def test_serci_with_aldona(self) -> None:
+        """--aldona flag passes to display (no crash)."""
+        from typer.testing import CliRunner
+
+        from A_medio.cli import app
+
+        runner = CliRunner()
+
+        with patch("A_medio.cli.get_youtube_service") as mock_get:
+            mock_service = MagicMock()
+            mock_service.is_available.return_value = True
+            mock_service.search.return_value = [{
+                "title": "V", "author": "A", "url": "https://youtu.be/v",
+                "view_count": 1000, "channel_follower_count": 500,
+                "duration": 120,
+            }]
+            mock_get.return_value = mock_service
+
+            result = runner.invoke(app, [
+                "filmeto", "serci", "test", "--aldona",
+            ])
+
+            assert result.exit_code == 0
+            assert "1000" in result.stdout
+            assert "500" in result.stdout
+
+    def test_serci_with_playlistoj(self) -> None:
+        """--playlistoj appends 'playlist' to search query."""
+        from typer.testing import CliRunner
+
+        from A_medio.cli import app
+
+        runner = CliRunner()
+
+        with patch("A_medio.cli.get_youtube_service") as mock_get:
+            mock_service = MagicMock()
+            mock_service.is_available.return_value = True
+            mock_service.search.return_value = [{
+                "title": "Playlist 1", "author": "A", "url": "https://youtu.be/abc",
+            }]
+            mock_get.return_value = mock_service
+
+            result = runner.invoke(app, [
+                "filmeto", "serci", "python", "--playlistoj",
+            ])
+
+            assert result.exit_code == 0
+            # Should call search with "python playlist"
+            call_args, _ = mock_service.search.call_args
+            assert "playlist" in call_args[0]
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Playlist limit + estimate CLI (#8, #9)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestCLIDownloadExtras:
+    """CLI --taksi, --limo flags on eljuti."""
+
+    def test_eljuti_with_limo(self) -> None:
+        """--limo passes playlist_end to download."""
+        from typer.testing import CliRunner
+
+        from A_medio.cli import app
+
+        runner = CliRunner()
+
+        with patch("A_medio.cli.get_youtube_service") as mock_get:
+            mock_service = MagicMock()
+            mock_service.is_available.return_value = True
+            mock_service.get_download_dir.return_value = "/tmp"
+            mock_service.download.return_value = [Path("/tmp/v.mp4")]
+            mock_get.return_value = mock_service
+
+            result = runner.invoke(app, [
+                "filmeto", "eljuti",
+                "https://youtu.be/abc",
+                "--limo", "5",
+            ])
+
+            assert result.exit_code == 0
+            _, kwargs = mock_service.download.call_args
+            assert kwargs.get("playlist_end") == 5
+
+    def test_eljuti_with_taksi(self) -> None:
+        """--taksi calls estimate() instead of download()."""
+        from typer.testing import CliRunner
+
+        from A_medio.cli import app
+        from A_medio.services.youtube import EstimateResult
+
+        runner = CliRunner()
+
+        with patch("A_medio.cli.get_youtube_service") as mock_get:
+            mock_service = MagicMock()
+            mock_service.is_available.return_value = True
+            mock_service.estimate.return_value = EstimateResult(
+                count=3, total_bytes=150_000_000,
+                items=[
+                    {"title": "V1", "filesize": 50_000_000},
+                    {"title": "V2", "filesize": 100_000_000},
+                ],
+            )
+            mock_get.return_value = mock_service
+
+            result = runner.invoke(app, [
+                "filmeto", "eljuti",
+                "https://youtu.be/abc",
+                "--taksi",
+            ])
+
+            assert result.exit_code == 0
+            assert "Taksita" in result.stdout or "Estimated" in result.stdout
+            assert "3" in result.stdout
+            assert not mock_service.download.called  # Should not download
