@@ -1,5 +1,9 @@
 # A-medio
 
+## Context
+
+For architecture and API reference, see [A-workspace](./workspace/).
+
 A-medio - media management (video, photo, audio)
 
 ## Install
