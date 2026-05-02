@@ -87,6 +87,25 @@ Uses the **yt-dlp Python library** (not subprocess) for all operations:
 - `auto` / `all` — download all available subtitles
 - Comma-separated language codes (e.g. `eo,en,fr`)
 
+### Cookie / Browser Auth
+
+Two sources supported, passed as yt-dlp options:
+
+| CLI flag | yt-dlp option | Example |
+|---|---|---|
+| ``--kuketoj <path>`` | ``cookiefile`` | ``--kuketoj /tmp/cookies.txt`` |
+| ``--kuketoj-de-retumilo <browser>[:<profile>]`` | ``cookiesfrombrowser`` | ``--kuketoj-de-retumilo floorp`` |
+
+**Retry strategy:** Search tries multiple cookie sources in order:
+1. Cached successful strategy (from previous search)
+2. Explicit ``--kuketoj`` file
+3. Auto-discovered browser profiles (Firefox forks: floorp, librewolf, waterfox, zen)
+4. No cookies (bare fallback)
+
+Certificate errors and empty results trigger automatic fallback retries.
+
+**CLI:** ``kuketoj-helpo`` command shows detailed setup instructions.
+
 ### CSV Batch Download
 
 ``parse_csv_rows()`` parses CSV files into download specs for batch processing:
@@ -129,7 +148,7 @@ Results are cached in SQLite for offline search via `--local` flag.
 
 | Feature | Issue | Priority |
 |---------|-------|----------|
-| Cookie/browser auth (`--kuketoj`, `--kuketoj-de-retumilo`, `kuketoj-helpo`) | [#6](https://github.com/Ron-RONZZ-org/A-medio/issues/6) | High |
+| Cookie/browser auth | ✅ [#6](https://github.com/Ron-RONZZ-org/A-medio/issues/6) | Done |
 | `ludi` (play video in temp dir) | [#7](https://github.com/Ron-RONZZ-org/A-medio/issues/7) | Medium |
 | Download size estimation | [#8](https://github.com/Ron-RONZZ-org/A-medio/issues/8) | Low |
 | Search enhancements (`--aldona`, `--playlistoj`, `--limo`) | [#9](https://github.com/Ron-RONZZ-org/A-medio/issues/9) | Low |
