@@ -87,6 +87,26 @@ Uses the **yt-dlp Python library** (not subprocess) for all operations:
 - `auto` / `all` — download all available subtitles
 - Comma-separated language codes (e.g. `eo,en,fr`)
 
+### CSV Batch Download
+
+``parse_csv_rows()`` parses CSV files into download specs for batch processing:
+
+**Supported columns:**
+
+| Header (Esperanto) | English Alias | Type |
+|---|---|---|
+| `celoj` | `targets` | URL(s) — space/comma/semicolon separated |
+| `difino` | `resolution` | int (max video height) |
+| `sonkvalito` | `audio_bitrate` | int (kbps) |
+| `audio` | — | bool (1/0, true/false, jes/ne) |
+| `filmeto` | `video_only` | bool |
+| `vojo` | `output_dir` | str (path) |
+| `subtitoloj` | `subtitles` | str (comma-separated langs) |
+
+**CLI usage:** ``medio filmeto eljuti --csv-dosiero elsutoj.csv``
+
+CLI flags (``--difino``, ``--audio``, etc.) serve as default values inherited by all CSV rows.
+
 ### FTS5 Search
 
 YouTube videos use FTS5 for full-text search on:
