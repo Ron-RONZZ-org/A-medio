@@ -119,6 +119,17 @@ def config_set(key: str, value: str) -> None:
 # ──────────────────────────────────────────────────────────────────────────────
 
 
+@filmeto.command("kuketoj-helpo")
+def filmeto_kuketoj_helpo() -> None:
+    """Show detailed instructions for YouTube cookie setup.
+
+    Explains how to find browser profiles, use --kuketoj for cookie files,
+    and use --kuketoj-de-retumilo for browser-based cookie extraction.
+    """
+    from A_medio.services.youtube import _cookie_help_text
+    info(_cookie_help_text())
+
+
 @filmeto.command("serci")
 def filmeto_serci(
     query: str,
@@ -126,13 +137,29 @@ def filmeto_serci(
     filter_field: Optional[str] = typer.Option(None, "--filter", "-f", help="Filter field (title, description, author)"),
     regex: Optional[str] = typer.Option(None, "--regex", "-r", help="Regex pattern to match"),
     local_only: bool = typer.Option(False, "--local", "-l", help="Search local cache only"),
+    kuketoj: Optional[str] = typer.Option(None, "--kuketoj", help="Path to cookies.txt for YouTube authentication."),
+    kuketoj_de_retumilo: Optional[str] = typer.Option(
+        None, "--kuketoj-de-retumilo",
+        help=(
+            "Browser to extract cookies from. "
+            "Valid values: firefox, floorp, librewolf, waterfox, zen (Firefox-based), "
+            "chrome, brave, vivaldi, chromium (Chromium-based). "
+            "Append :profile_path for a specific profile. "
+            "Example: --kuketoj-de-retumilo floorp"
+        ),
+    ),
 ) -> None:
     """Search videos on YouTube.
+
+    If search fails (e.g. YouTube blocks unauthenticated requests), try
+    --kuketoj or --kuketoj-de-retumilo to provide authentication cookies.
 
     Examples:
         medio filmeto serci "python tutorial"
         medio filmeto serci "music" --filter author --regex "official"
         medio filmeto serci "news" --local
+        medio filmeto serci "tutorial" --kuketoj /tmp/cookies.txt
+        medio filmeto serci "music" --kuketoj-de-retumilo floorp
     """
     youtube = get_youtube_service()
 
@@ -147,19 +174,23 @@ def filmeto_serci(
     if local_only:
         results = youtube.search_local(query, limit=limit)
     else:
-        opts = {"limit": limit}
+        opts: dict[str, Any] = {"limit": limit}
         if filter_field and regex:
             opts["filter"] = filter_field
             opts["regex"] = regex
         elif regex:
             opts["regex"] = regex
+        if kuketoj:
+            opts["cookies"] = kuketoj
+        if kuketoj_de_retumilo:
+            opts["cookies_from_browser"] = kuketoj_de_retumilo
         results = youtube.search(query, **opts)
 
     if not results:
         info(tr_multi(
-            "Neniuj rezultoj trovitaj.",
-            "No results found.",
-            "Aucun résultat trouvé.",
+            "Neniuj rezultoj trovitaj. Provu --kuketoj aŭ --kuketoj-de-retumilo.",
+            "No results found. Try --kuketoj or --kuketoj-de-retumilo.",
+            "Aucun résultat trouvé. Essayez --kuketoj ou --kuketoj-de-retumilo.",
         ))
         return
 
@@ -190,9 +221,19 @@ def filmeto_eljuti(
         None, "--subtitoloj", "--sub",
         help="Subtitles: 'auto', 'all', or comma-separated language codes (e.g. 'eo,en,fr').",
     ),
+    kuketoj: Optional[str] = typer.Option(None, "--kuketoj", help="Path to cookies.txt for YouTube authentication."),
+    kuketoj_de_retumilo: Optional[str] = typer.Option(
+        None, "--kuketoj-de-retumilo",
+        help=(
+            "Browser to extract cookies from. "
+            "Valid values: firefox, floorp, librewolf, waterfox, zen (Firefox-based), "
+            "chrome, brave, vivaldi, chromium (Chromium-based). "
+            "Append :profile_path for a specific profile."
+        ),
+    ),
     csv_dosiero: Optional[Path] = typer.Option(
         None, "--csv-dosiero", "--csv",
-        help="CSV file for batch download. Columns: celoj,difino,sonkvalito,audio,filmeto,vojo,subtitoloj.",
+        help="CSV file for batch download. Columns: celoj,difino,sonkvalito,audio,filmeto,vojo,subtitoloj,kuketoj,kuketoj_de_retumilo.",
         exists=True,
         dir_okay=False,
         readable=True,
@@ -202,11 +243,14 @@ def filmeto_eljuti(
 
     Provide a single URL as argument, or use --csv-dosiero for batch download.
 
+    If downloads fail due to YouTube blocking, try --kuketoj or --kuketoj-de-retumilo.
+
     Examples:
         medio filmeto eljuti https://www.youtube.com/watch?v=...
         medio filmeto eljuti https://youtu.be/... --output /path/to/dir
         medio filmeto eljuti https://youtu.be/... --audio
         medio filmeto eljuti https://youtu.be/... --difino 1080 --subtitoloj eo,en
+        medio filmeto eljuti https://youtu.be/... --kuketoj /tmp/cookies.txt
         medio filmeto eljuti --csv-dosiero elsutoj.csv
     """
     from A_medio.services.youtube import parse_csv_rows
@@ -237,6 +281,10 @@ def filmeto_eljuti(
             initial["audio_bitrate"] = audio_bitrate
         if subtitles is not None:
             initial["subtitles"] = subtitles
+        if kuketoj is not None:
+            initial["cookies"] = kuketoj
+        if kuketoj_de_retumilo is not None:
+            initial["cookies_from_browser"] = kuketoj_de_retumilo
 
         try:
             specs = parse_csv_rows(csv_dosiero, initial_state=initial)
@@ -294,6 +342,10 @@ def filmeto_eljuti(
         download_opts["audio_bitrate"] = audio_bitrate
     if subtitles is not None:
         download_opts["subtitles"] = subtitles
+    if kuketoj is not None:
+        download_opts["cookies"] = kuketoj
+    if kuketoj_de_retumilo is not None:
+        download_opts["cookies_from_browser"] = kuketoj_de_retumilo
 
     files = youtube.download(url, **download_opts)
 

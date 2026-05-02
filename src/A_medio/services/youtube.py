@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Generator
 
 from A import error, info, tr, tr_multi
+from A.core.paths import data_dir
 from A.core.service import CRUDService
 from A.data.search import FTSConfig
 from A.utils.normalize import fold_search_text
@@ -165,6 +166,12 @@ _CSV_HEADER_MAP: dict[str, str] = {
     "subtitoloj": "subtitles",
     "subtitles": "subtitles",
     "subs": "subtitles",
+    # cookies
+    "kuketoj": "cookies",
+    "cookies": "cookies",
+    "cookie_file": "cookies",
+    "kuketoj_de_retumilo": "cookies_from_browser",
+    "cookies_from_browser": "cookies_from_browser",
 }
 
 _CSV_TRUE_VALUES: frozenset[str] = frozenset({"1", "true", "yes", "y", "jes", "j"})
@@ -241,6 +248,8 @@ def parse_csv_rows(
     ``filmeto``     ``video_only``           bool
     ``vojo``        ``output_dir``           str
     ``subtitoloj``  ``subtitles``            str
+    ``kuketoj``     ``cookies``              str (path to cookies.txt)
+    ``kuketoj_de_retumilo``  ``cookies_from_browser``  str
     ==============  =======================  ===========
 
     Args:
@@ -314,7 +323,7 @@ def parse_csv_rows(
                             f"'{option_key}': {cell!r}."
                         ) from exc
 
-                elif option_key in {"output_dir", "subtitles"}:
+                elif option_key in {"output_dir", "subtitles", "cookies", "cookies_from_browser"}:
                     state[option_key] = cell
 
             # Ensure targets exist
@@ -332,9 +341,292 @@ def parse_csv_rows(
                 "video_only": bool(state.get("video_only", False)),
                 "output_dir": state.get("output_dir"),
                 "subtitles": state.get("subtitles"),
+                "cookies": state.get("cookies"),
+                "cookies_from_browser": state.get("cookies_from_browser"),
             })
 
     return rows
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Cookie / browser auth helpers
+# ──────────────────────────────────────────────────────────────────────────────
+
+# Map browser forks to their base browser for yt-dlp's cookiesfrombrowser.
+_BROWSER_FORK_MAP: dict[str, str] = {
+    "floorp": "firefox",
+    "librewolf": "firefox",
+    "waterfox": "firefox",
+    "zen": "firefox",
+    "brave": "chrome",
+    "vivaldi": "chrome",
+    "chromium": "chrome",
+}
+
+
+def _parse_cookies_from_browser(raw: str) -> tuple[str, ...]:
+    """Parse a ``browser:profile`` string into a yt-dlp ``cookiesfrombrowser`` tuple.
+
+    Args:
+        raw: ``"browser"`` or ``"browser:/path/to/profile"``.
+
+    Returns:
+        A tuple compatible with yt-dlp's ``cookiesfrombrowser`` option,
+        e.g. ``("firefox",)`` or ``("firefox", "/path", None, None)``.
+    """
+    value = raw.strip()
+    if ":" in value:
+        browser_raw, profile = value.split(":", 1)
+        browser = _BROWSER_FORK_MAP.get(browser_raw.strip().lower(), browser_raw.strip().lower())
+        profile = profile.strip()
+        if profile:
+            # yt-dlp tuple is (browser, profile, keyring, container); pass None
+            # placeholders so absolute paths are never misread as container names.
+            return (browser, profile, None, None)
+        return (browser,)
+    browser = _BROWSER_FORK_MAP.get(value.lower(), value.lower())
+    return (browser,)
+
+
+def _discover_firefox_profiles(browser_hint: str) -> list[str]:
+    """Auto-discover Firefox-style browser profiles that have cookies.
+
+    Scans the browser's profile directory for ``profiles.ini`` and
+    finds profiles containing ``cookies.sqlite``.
+
+    Args:
+        browser_hint: Browser name (floorp, librewolf, firefox, etc.).
+
+    Returns:
+        List of absolute profile directory paths.
+    """
+    home = Path.home()
+    hint = browser_hint.strip().lower()
+    roots: list[Path] = []
+    if hint == "floorp":
+        roots.append(home / ".floorp")
+    elif hint in {"librewolf"}:
+        roots.append(home / ".librewolf")
+    elif hint in {"waterfox"}:
+        roots.append(home / ".waterfox")
+    elif hint in {"zen"}:
+        roots.append(home / ".zen")
+    else:
+        roots.append(home / ".mozilla" / "firefox")
+
+    profiles: list[str] = []
+    for root in roots:
+        profiles_ini = root / "profiles.ini"
+        if profiles_ini.exists():
+            try:
+                current_section = ""
+                values: dict[str, dict[str, str]] = {}
+                for raw_line in profiles_ini.read_text(encoding="utf-8").splitlines():
+                    line = raw_line.strip()
+                    if not line or line.startswith(";"):
+                        continue
+                    if line.startswith("[") and line.endswith("]"):
+                        current_section = line[1:-1].strip()
+                        values.setdefault(current_section, {})
+                        continue
+                    if "=" not in line or not current_section:
+                        continue
+                    k, v = line.split("=", 1)
+                    values.setdefault(current_section, {})[k.strip()] = v.strip()
+                for section, cfg in values.items():
+                    if not section.lower().startswith("profile"):
+                        continue
+                    raw_path = cfg.get("Path", "").strip()
+                    if not raw_path:
+                        continue
+                    is_relative = cfg.get("IsRelative", "1").strip() == "1"
+                    candidate = (root / raw_path) if is_relative else Path(raw_path)
+                    if (candidate / "cookies.sqlite").exists():
+                        profiles.append(str(candidate))
+            except OSError:
+                pass
+        if root.exists():
+            for cookie_db in root.rglob("cookies.sqlite"):
+                candidate = cookie_db.parent
+                candidate_str = str(candidate)
+                if candidate_str not in profiles:
+                    profiles.append(candidate_str)
+
+    unique: list[str] = []
+    seen: set[str] = set()
+    for p in profiles:
+        if p not in seen:
+            seen.add(p)
+            unique.append(p)
+    return unique
+
+
+def _cookie_browser_candidates(raw: str | None) -> list[tuple[str, ...] | None]:
+    """Build a list of ``cookiesfrombrowser`` candidates to try.
+
+    When a browser name is given (e.g. ``"floorp"``), this will try:
+    1. The explicit browser spec (e.g. ``("firefox",)``).
+    2. Auto-discovered profiles with cookies, if a Firefox fork.
+
+    Args:
+        raw: The ``--kuketoj-de-retumilo`` value, or ``None``.
+
+    Returns:
+        List of candidate tuples (or ``None`` for no cookies).
+    """
+    if not raw:
+        return [None]
+    value = raw.strip()
+    if not value:
+        return [None]
+
+    base = _parse_cookies_from_browser(value)
+    candidates: list[tuple[str, ...] | None] = [base]
+
+    if ":" in value:
+        browser_raw = value.split(":", 1)[0].strip().lower()
+        mapped = _BROWSER_FORK_MAP.get(browser_raw, browser_raw)
+        if mapped == "firefox":
+            for profile in _discover_firefox_profiles(browser_raw):
+                spec = (mapped, profile, None, None)
+                if spec not in candidates:
+                    candidates.append(spec)
+        if None not in candidates:
+            candidates.append(None)
+        return candidates
+
+    browser_raw = value.lower()
+    mapped = _BROWSER_FORK_MAP.get(browser_raw, browser_raw)
+    if mapped == "firefox":
+        for profile in _discover_firefox_profiles(browser_raw):
+            spec = (mapped, profile, None, None)
+            if spec not in candidates:
+                candidates.append(spec)
+    return candidates
+
+
+def build_cookie_opts(
+    cookies: str | None = None,
+    cookies_from_browser: str | None = None,
+) -> dict[str, Any]:
+    """Build yt-dlp options for cookie authentication.
+
+    Args:
+        cookies: Path to a Netscape-format cookies.txt file.
+        cookies_from_browser: Browser name or ``"browser:profile"`` string.
+
+    Returns:
+        Dict with ``cookiefile`` and/or ``cookiesfrombrowser`` keys,
+        or empty dict if neither source is provided.
+    """
+    opts: dict[str, Any] = {}
+    if cookies:
+        opts["cookiefile"] = cookies
+    if cookies_from_browser:
+        opts["cookiesfrombrowser"] = _parse_cookies_from_browser(cookies_from_browser)
+    return opts
+
+
+def _cookie_help_text() -> str:
+    """Return detailed help text for cookie setup."""
+    home = Path.home()
+    return (
+        "Kuketoj helpo:\n"
+        "  1) Trovu vian retumilan profilon.\n"
+        f"     Floorp (Linux): {home}/.floorp/<profilo>\n"
+        f"     Firefox (Linux): {home}/.mozilla/firefox/<profilo>\n"
+        "     Konsilo: legu profiles.ini por ĝusta profilo-nomo.\n"
+        "  2) Testu kun:\n"
+        "     --kuketoj-de-retumilo floorp\n"
+        "     aŭ --kuketoj-de-retumilo floorp:/plena/vojo/al/profilo\n"
+        "     ekz.: --kuketoj-de-retumilo floorp:/home/vi/.floorp/abc.default-default\n"
+        "     (la profilo devas enhavi cookies.sqlite)\n"
+        "     Noto: filmeto aŭtomate provas plurajn profilojn por firefox/floorp.\n"
+        "  3) CLI-kuketoj-eksporto (preferata):\n"
+        "     pip install --user yt-dlp\n"
+        "     yt-dlp --cookies-from-browser floorp --cookies /tmp/youtube.cookies.txt"
+        " --skip-download https://www.youtube.com/watch?v=dQw4w9WgXcQ\n"
+        "     aŭ kun specifa profilo:\n"
+        "     yt-dlp --cookies-from-browser firefox:/home/vi/.floorp/abc.default-default"
+        " --cookies /tmp/youtube.cookies.txt --skip-download https://www.youtube.com/watch?v=dQw4w9WgXcQ\n"
+        "     poste uzu: filmeto serci <teksto> --kuketoj /tmp/youtube.cookies.txt\n"
+        "  4) Rapida diagnozo (CLI):\n"
+        "     ls ~/.floorp\n"
+        "     find ~/.floorp -maxdepth 3 -name cookies.sqlite\n"
+        "  5) JavaScript-runtime por YouTube (rekomendata):\n"
+        "     sudo apt install -y nodejs\n"
+        "     (aŭ instalu deno: https://deno.com/)\n"
+        "  6) Se la konto uzas apartajn ujojn (containers),\n"
+        "     provu retumilan defaŭltan ujon."
+    )
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Search strategy persistence
+# ──────────────────────────────────────────────────────────────────────────────
+
+_SEARCH_STRATEGY_FILE: Path | None = None
+
+
+def _get_strategy_path() -> Path:
+    """Get the path to the search strategy JSON file.
+
+    Creates the parent directory if needed.
+
+    Returns:
+        ``<data_dir>/medio/serĉa_strategio.json``
+    """
+    global _SEARCH_STRATEGY_FILE
+    if _SEARCH_STRATEGY_FILE is None:
+        path = data_dir() / "medio" / "serĉa_strategio.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        _SEARCH_STRATEGY_FILE = path
+    return _SEARCH_STRATEGY_FILE
+
+
+def _load_search_strategy() -> dict[str, Any]:
+    """Load previously saved search strategy from disk.
+
+    Returns:
+        Dict with ``"opts"`` key if a strategy was saved, or empty dict.
+    """
+    path = _get_strategy_path()
+    if not path.exists():
+        return {}
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return {}
+    return raw if isinstance(raw, dict) else {}
+
+
+def _save_search_strategy(strategy: dict[str, Any]) -> None:
+    """Persist a working search strategy so future searches try it first.
+
+    Args:
+        strategy: Dict with at least ``"opts"`` (yt-dlp options that worked).
+    """
+    def _json_safe(value: Any) -> Any:
+        if value is None or isinstance(value, (bool, int, float, str)):
+            return value
+        if isinstance(value, tuple):
+            return [_json_safe(v) for v in value]
+        if isinstance(value, list):
+            return [_json_safe(v) for v in value]
+        if isinstance(value, set):
+            return sorted(_json_safe(v) for v in value)
+        if isinstance(value, dict):
+            return {str(k): _json_safe(v) for k, v in value.items()}
+        return str(value)
+
+    path = _get_strategy_path()
+    try:
+        path.write_text(
+            json.dumps(_json_safe(strategy), ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+    except OSError:
+        pass  # Persistence is best-effort
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -537,15 +829,28 @@ class YouTubeService(MediaService):
 
     # ── search ────────────────────────────────────────────────────────────
 
-    def _yt_dlp_search(self, query: str, limit: int = 10) -> list[YouTubeVideo]:
-        """Search YouTube via yt-dlp Python library.
+    def _yt_dlp_search(
+        self,
+        query: str,
+        limit: int = 10,
+        cookies: str | None = None,
+        cookies_from_browser: str | None = None,
+    ) -> list[YouTubeVideo]:
+        """Search YouTube via yt-dlp with retry strategy.
+
+        Builds a queue of candidate option sets (saved strategy first,
+        then explicit cookies, then browser profiles, then bare) and tries
+        each until one returns results.  On certificate or format errors,
+        fallback variants are automatically appended.
 
         Args:
             query: Search query string.
             limit: Max number of results.
+            cookies: Path to a Netscape cookies.txt file.
+            cookies_from_browser: Browser name or ``"browser:profile"``.
 
         Returns:
-            List of ``YouTubeVideo`` objects.
+            List of ``YouTubeVideo`` objects (may be empty).
         """
         if not self.is_available():
             error(tr_multi(
@@ -555,32 +860,112 @@ class YouTubeService(MediaService):
             ))
             return []
 
-        opts: dict[str, Any] = {
+        base_opts: dict[str, Any] = {
             "quiet": True,
             "skip_download": True,
             "no_warnings": True,
             "ignoreerrors": True,
             "extract_flat": False,
         }
+
+        # ── Build candidate queue ─────────────────────────────────────────
+        candidates: list[dict[str, Any]] = []
+
+        # 1. Saved strategy (tried first — fastest path)
+        cached = _load_search_strategy()
+        cached_opts = cached.get("opts")
+        if isinstance(cached_opts, dict):
+            candidates.append(dict(cached_opts))
+
+        # 2. Explicit cookie file
+        if cookies:
+            with_cookie = dict(base_opts)
+            with_cookie["cookiefile"] = cookies
+            candidates.append(with_cookie)
+
+        # 3. Browser cookies (with auto-discovered profiles)
+        for browser_spec in _cookie_browser_candidates(cookies_from_browser):
+            with_browser = dict(base_opts)
+            if browser_spec is not None:
+                with_browser["cookiesfrombrowser"] = browser_spec
+            candidates.append(with_browser)
+
+        # 4. Fallback: bare opts
+        if not candidates:
+            candidates.append(dict(base_opts))
+
+        # ── Try candidates with retry ─────────────────────────────────────
         search_query = f"ytsearch{max(1, limit)}:{query}"
-        videos: list[YouTubeVideo] = []
+        last_error: DownloadError | Exception | None = None
+        pending = list(candidates)
+        seen: set[str] = set()
 
-        try:
-            with self._wrapper.create_ydl(opts) as ydl:
-                result = ydl.extract_info(search_query, download=False)
-        except _get_download_error() as exc:
+        while pending:
+            opts = pending.pop(0)
+            opts_key = json.dumps(opts, sort_keys=True, default=str)
+            if opts_key in seen:
+                continue
+            seen.add(opts_key)
+
+            try:
+                with self._wrapper.create_ydl(opts) as ydl:
+                    result = ydl.extract_info(search_query, download=False)
+            except _get_download_error() as exc:
+                last_error = exc
+                msg = str(exc).lower()
+                # Certificate error → retry with nocheckcertificate
+                if ("certificate_verify_failed" in msg or "hostname mismatch" in msg
+                        or "certificateverifyerror" in msg) and not opts.get("nocheckcertificate"):
+                    retry = dict(opts)
+                    retry["nocheckcertificate"] = True
+                    pending.append(retry)
+                # Format not available → retry with extract_flat
+                if "requested format is not available" in msg and not opts.get("extract_flat"):
+                    retry = dict(opts)
+                    retry["extract_flat"] = True
+                    pending.append(retry)
+                continue
+
+            # Filter result entries
+            entries = result.get("entries") if isinstance(result, dict) else []
+            filtered = [
+                e for e in list(entries or [])
+                if isinstance(e, dict)
+                and str(e.get("availability") or "").lower() not in {
+                    "private", "premium_only", "subscriber_only",
+                    "needs_auth", "unavailable",
+                }
+            ]
+
+            if filtered:
+                # Save successful strategy
+                _save_search_strategy({"opts": opts, "source": "search-success"})
+                return [YouTubeVideo.from_yt_dlp(e) for e in filtered]
+
+            # 0 usable entries → add fallback variants
+            if not opts.get("nocheckcertificate"):
+                retry = dict(opts)
+                retry["nocheckcertificate"] = True
+                pending.append(retry)
+            if not opts.get("extract_flat"):
+                retry = dict(opts)
+                retry["extract_flat"] = True
+                pending.append(retry)
+
+        # All candidates exhausted
+        if last_error:
             error(tr_multi(
-                f"Serĉo fiaskis: {exc}",
-                f"Search failed: {exc}",
-                f"Échec de recherche: {exc}",
+                f"Serĉo fiaskis: {last_error}",
+                f"Search failed: {last_error}",
+                f"Échec de recherche: {last_error}",
             ))
-            return []
-
-        entries = result.get("entries") if isinstance(result, dict) else []
-        for item in list(entries or []):
-            if isinstance(item, dict):
-                videos.append(YouTubeVideo.from_yt_dlp(item))
-        return videos
+        else:
+            error(tr_multi(
+                "Neniuj rezultoj trovitaj.",
+                "No results found.",
+                "Aucun résultat trouvé.",
+            ))
+        return []
 
     def search(
         self,
@@ -593,15 +978,24 @@ class YouTubeService(MediaService):
             query: Search query string.
             **opts: Additional options:
                 - limit: Max results (default 10).
+                - cookies: Path to cookies.txt file.
+                - cookies_from_browser: Browser name or ``"browser:profile"``.
                 - filter: Field to filter on (title, description, author).
                 - regex: Regex pattern to match.
-                - playlist: Playlist URL to filter by.
 
         Returns:
             List of video dicts.
         """
         limit = opts.get("limit", 10)
-        videos = self._yt_dlp_search(query, limit=limit)
+        cookies = opts.get("cookies")
+        cookies_from_browser = opts.get("cookies_from_browser")
+
+        videos = self._yt_dlp_search(
+            query,
+            limit=limit,
+            cookies=cookies,
+            cookies_from_browser=cookies_from_browser,
+        )
 
         if not videos:
             return []
@@ -610,7 +1004,7 @@ class YouTubeService(MediaService):
         service = self.get_service()
         now = datetime.now().isoformat()
         for video in videos:
-            existing = service.get_by_filter(video_id=video.video_id)
+            existing = service.get_by_field("video_id", video.video_id)
             if not existing:
                 service.create({
                     "video_id": video.video_id,
@@ -662,8 +1056,7 @@ class YouTubeService(MediaService):
             Video dict or None.
         """
         service = self.get_service()
-        result = service.get_by_filter(video_id=video_id)
-        return result[0] if result else None
+        return service.get_by_field("video_id", video_id)
 
     def search_local(self, query: str, **opts: Any) -> list[dict[str, Any]]:
         """Search local cache only (using FTS5).
@@ -696,6 +1089,8 @@ class YouTubeService(MediaService):
                 - video_only: Video stream only (no audio).
                 - audio_bitrate: Max audio bitrate in kbps.
                 - subtitles: Subtitle spec (auto, all, or langs).
+                - cookies: Path to cookies.txt file.
+                - cookies_from_browser: Browser name or ``"browser:profile"``.
 
         Returns:
             List of paths to downloaded files (empty if failed).
@@ -726,6 +1121,10 @@ class YouTubeService(MediaService):
             "ignoreerrors": True,
         }
         ydl_opts.update(build_subtitle_opts(opts.get("subtitles")))
+        ydl_opts.update(build_cookie_opts(
+            cookies=opts.get("cookies"),
+            cookies_from_browser=opts.get("cookies_from_browser"),
+        ))
 
         before = {p for p in output_dir.iterdir()} if output_dir.exists() else set()
 
@@ -827,5 +1226,7 @@ __all__ = [
     "get_youtube_service",
     "build_format_selector",
     "build_subtitle_opts",
+    "build_cookie_opts",
     "parse_csv_rows",
+    "_cookie_help_text",
 ]

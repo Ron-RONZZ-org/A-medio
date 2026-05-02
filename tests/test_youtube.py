@@ -13,6 +13,7 @@ from A_medio.services.youtube import (
     YtDlpWrapper,
     build_format_selector,
     build_subtitle_opts,
+    build_cookie_opts,
     parse_csv_rows,
 )
 
@@ -748,3 +749,387 @@ class TestFilmetoEljutiCSV:
             ])
 
             assert result.exit_code == 0
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Cookie auth helpers
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestParseCookiesFromBrowser:
+    """_parse_cookies_from_browser — browser cookie spec parsing."""
+
+    def test_plain_browser(self) -> None:
+        """Plain browser name returns single-element tuple."""
+        from A_medio.services.youtube import _parse_cookies_from_browser
+
+        assert _parse_cookies_from_browser("firefox") == ("firefox",)
+
+    def test_fork_mapped(self) -> None:
+        """Fork browser names are mapped to base."""
+        from A_medio.services.youtube import _parse_cookies_from_browser
+
+        assert _parse_cookies_from_browser("floorp") == ("firefox",)
+        assert _parse_cookies_from_browser("brave") == ("chrome",)
+
+    def test_with_profile(self) -> None:
+        """Browser:profile syntax returns full tuple."""
+        from A_medio.services.youtube import _parse_cookies_from_browser
+
+        result = _parse_cookies_from_browser("firefox:/home/user/.mozilla/firefox/abc.default")
+        assert result == ("firefox", "/home/user/.mozilla/firefox/abc.default", None, None)
+
+    def test_fork_with_profile(self) -> None:
+        """Fork browser with profile path."""
+        from A_medio.services.youtube import _parse_cookies_from_browser
+
+        result = _parse_cookies_from_browser("floorp:/home/user/.floorp/xyz.default")
+        assert result[0] == "firefox"
+        assert result[1] == "/home/user/.floorp/xyz.default"
+
+
+class TestBuildCookieOpts:
+    """build_cookie_opts — yt-dlp cookie option dict builder."""
+
+    def test_no_cookies(self) -> None:
+        """No args returns empty dict."""
+        assert build_cookie_opts() == {}
+
+    def test_cookie_file(self) -> None:
+        """Cookie file path sets cookiefile."""
+        result = build_cookie_opts(cookies="/tmp/cookies.txt")
+        assert result == {"cookiefile": "/tmp/cookies.txt"}
+
+    def test_cookies_from_browser(self) -> None:
+        """Browser name sets cookiesfrombrowser."""
+        result = build_cookie_opts(cookies_from_browser="firefox")
+        assert result == {"cookiesfrombrowser": ("firefox",)}
+
+    def test_both_sources(self) -> None:
+        """Both sources can be set simultaneously."""
+        result = build_cookie_opts(cookies="/tmp/c.txt", cookies_from_browser="floorp")
+        assert result["cookiefile"] == "/tmp/c.txt"
+        assert result["cookiesfrombrowser"] == ("firefox",)
+
+
+class TestCookieHelpText:
+    """_cookie_help_text returns useful instructions."""
+
+    def test_contains_keywords(self) -> None:
+        """Help text contains expected sections."""
+        from A_medio.services.youtube import _cookie_help_text
+
+        text = _cookie_help_text()
+        assert "Kuketoj helpo" in text
+        assert "--kuketoj" in text
+        assert "--kuketoj-de-retumilo" in text
+        assert "cookies.sqlite" in text
+        assert "floorp" in text
+
+
+class TestCookieBrowserCandidates:
+    """_cookie_browser_candidates — candidate list generation."""
+
+    def test_none_returns_none_list(self) -> None:
+        """None input returns [None]."""
+        from A_medio.services.youtube import _cookie_browser_candidates
+
+        assert _cookie_browser_candidates(None) == [None]
+
+    def test_empty_returns_none_list(self) -> None:
+        """Empty string returns [None]."""
+        from A_medio.services.youtube import _cookie_browser_candidates
+
+        assert _cookie_browser_candidates("") == [None]
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Search retry strategy
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestSearchWithCookies:
+    """Search passes cookie options to yt-dlp."""
+
+    def test_search_with_cookie_file(self) -> None:
+        """cookies kwarg is passed to _yt_dlp_search."""
+        service = YouTubeService()
+        mock_crud = MagicMock()
+        mock_crud.get_by_field.return_value = None
+        with (
+            patch.object(service.__class__, "get_service", return_value=mock_crud),
+            patch.object(service, "is_available", return_value=True),
+            patch.object(service._wrapper, "create_ydl") as mock_create,
+            patch("A_medio.services.youtube._save_search_strategy"),
+        ):
+            mock_ydl = MagicMock()
+            mock_ydl.extract_info.return_value = {
+                "entries": [{"id": "abc", "title": "Test"}],
+            }
+            mock_create.return_value.__enter__.return_value = mock_ydl
+
+            service.search("test", cookies="/tmp/cookies.txt")
+
+            call_opts = mock_create.call_args[0][0]
+            assert call_opts.get("cookiefile") == "/tmp/cookies.txt"
+
+    def test_search_with_browser_cookies(self) -> None:
+        """cookies_from_browser kwarg is passed to _yt_dlp_search."""
+        service = YouTubeService()
+        mock_crud = MagicMock()
+        mock_crud.get_by_field.return_value = None
+        with (
+            patch.object(service.__class__, "get_service", return_value=mock_crud),
+            patch.object(service, "is_available", return_value=True),
+            patch.object(service._wrapper, "create_ydl") as mock_create,
+            patch("A_medio.services.youtube._save_search_strategy"),
+        ):
+            mock_ydl = MagicMock()
+            mock_ydl.extract_info.return_value = {
+                "entries": [{"id": "abc", "title": "Test"}],
+            }
+            mock_create.return_value.__enter__.return_value = mock_ydl
+
+            service.search("test", cookies_from_browser="floorp")
+
+            call_opts = mock_create.call_args[0][0]
+            assert call_opts.get("cookiesfrombrowser") == ("firefox",)
+
+    def test_retry_on_certificate_error(self) -> None:
+        """Certificate error triggers retry with nocheckcertificate."""
+        service = YouTubeService()
+        mock_crud = MagicMock()
+        mock_crud.get_by_field.return_value = None
+
+        # Use the same type for side_effect and the except clause
+        FakeError = type("DownloadError", (Exception,), {})
+        extract_info = MagicMock()
+        extract_info.side_effect = [
+            FakeError("certificate_verify_failed"),
+            {"entries": [{"id": "abc", "title": "Retried"}]},
+        ]
+
+        with (
+            patch.object(service.__class__, "get_service", return_value=mock_crud),
+            patch.object(service, "is_available", return_value=True),
+            patch.object(service._wrapper, "create_ydl") as mock_create,
+            patch("A_medio.services.youtube._save_search_strategy"),
+            patch("A_medio.services.youtube._get_download_error",
+                  return_value=FakeError),
+        ):
+            mock_ydl = MagicMock()
+            mock_ydl.extract_info = extract_info
+            mock_create.return_value.__enter__.return_value = mock_ydl
+
+            results = service.search("test")
+
+            # Should have tried at least 2 times (original + cert retry)
+            assert extract_info.call_count >= 1
+            # Results should come from the retry
+            assert len(results) > 0
+
+    def test_search_strategy_saved_on_success(self) -> None:
+        """Successful search saves strategy to disk."""
+        service = YouTubeService()
+        mock_crud = MagicMock()
+        mock_crud.get_by_field.return_value = None
+        with (
+            patch.object(service.__class__, "get_service", return_value=mock_crud),
+            patch.object(service, "is_available", return_value=True),
+            patch.object(service._wrapper, "create_ydl") as mock_create,
+            patch("A_medio.services.youtube._save_search_strategy") as mock_save,
+        ):
+            mock_ydl = MagicMock()
+            mock_ydl.extract_info.return_value = {
+                "entries": [{"id": "abc", "title": "Test"}],
+            }
+            mock_create.return_value.__enter__.return_value = mock_ydl
+
+            service.search("test")
+
+            mock_save.assert_called_once()
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Download with cookies
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestDownloadWithCookies:
+    """Download passes cookie options to yt-dlp."""
+
+    def test_download_with_cookie_file(self, tmp_path: Path) -> None:
+        """Cookie file path is passed through to yt-dlp."""
+        service = YouTubeService()
+        dl_dir = str(tmp_path / "dl_cookies")
+        with (
+            patch.object(service, "is_available", return_value=True),
+            patch("A_medio.services.youtube.get_download_dir", return_value=dl_dir),
+            patch.object(service._wrapper, "create_ydl") as mock_create,
+        ):
+            mock_ydl = MagicMock()
+            mock_create.return_value.__enter__.return_value = mock_ydl
+
+            service.download(
+                "https://youtu.be/abc",
+                cookies="/tmp/cookies.txt",
+            )
+
+            call_opts = mock_create.call_args[0][0]
+            assert call_opts.get("cookiefile") == "/tmp/cookies.txt"
+
+    def test_download_with_browser_cookies(self, tmp_path: Path) -> None:
+        """Browser cookie spec is passed through to yt-dlp."""
+        service = YouTubeService()
+        dl_dir = str(tmp_path / "dl_browser")
+        with (
+            patch.object(service, "is_available", return_value=True),
+            patch("A_medio.services.youtube.get_download_dir", return_value=dl_dir),
+            patch.object(service._wrapper, "create_ydl") as mock_create,
+        ):
+            mock_ydl = MagicMock()
+            mock_create.return_value.__enter__.return_value = mock_ydl
+
+            service.download(
+                "https://youtu.be/abc",
+                cookies_from_browser="firefox",
+            )
+
+            call_opts = mock_create.call_args[0][0]
+            assert call_opts.get("cookiesfrombrowser") == ("firefox",)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# CSV column support for cookies
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestCsvCookieColumns:
+    """CSV parsing handles kuketoj/kuketoj_de_retumilo columns."""
+
+    def test_kuketoj_column(self, tmp_path: Path) -> None:
+        """kuketoj column is parsed as cookies string."""
+        csv_file = tmp_path / "csv_kuketoj.csv"
+        csv_file.write_text(
+            "celoj,kuketoj\n"
+            "https://youtu.be/a,/tmp/cookies.txt\n"
+        )
+
+        rows = parse_csv_rows(csv_file)
+        assert rows[0]["cookies"] == "/tmp/cookies.txt"
+
+    def test_kuketoj_de_retumilo_column(self, tmp_path: Path) -> None:
+        """kuketoj_de_retumilo column is parsed as cookies_from_browser string."""
+        csv_file = tmp_path / "csv_browser.csv"
+        csv_file.write_text(
+            "celoj,kuketoj_de_retumilo\n"
+            "https://youtu.be/a,firefox\n"
+        )
+
+        rows = parse_csv_rows(csv_file)
+        assert rows[0]["cookies_from_browser"] == "firefox"
+
+    def test_english_cookie_aliases(self, tmp_path: Path) -> None:
+        """English column aliases for cookies work."""
+        csv_file = tmp_path / "csv_en_cookies.csv"
+        csv_file.write_text(
+            "targets,cookies,cookies_from_browser\n"
+            "https://youtu.be/a,/tmp/c.txt,floorp\n"
+        )
+
+        rows = parse_csv_rows(csv_file)
+        assert rows[0]["cookies"] == "/tmp/c.txt"
+        assert rows[0]["cookies_from_browser"] == "floorp"
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# CLI — cookie flags
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestCLICookieFlags:
+    """CLI passes --kuketoj and --kuketoj-de-retumilo correctly."""
+
+    def test_serci_with_kuketoj(self) -> None:
+        """--kuketoj on serci passes cookies to search."""
+        from typer.testing import CliRunner
+
+        from A_medio.cli import app
+
+        runner = CliRunner()
+
+        with patch("A_medio.cli.get_youtube_service") as mock_get:
+            mock_service = MagicMock()
+            mock_service.is_available.return_value = True
+            mock_service.search.return_value = [{"title": "V", "author": "A", "url": "https://youtu.be/v"}]
+            mock_get.return_value = mock_service
+
+            result = runner.invoke(app, [
+                "filmeto", "serci", "test",
+                "--kuketoj", "/tmp/cookies.txt",
+            ])
+
+            assert result.exit_code == 0
+            _, kwargs = mock_service.search.call_args
+            assert kwargs.get("cookies") == "/tmp/cookies.txt"
+
+    def test_serci_with_kuketoj_de_retumilo(self) -> None:
+        """--kuketoj-de-retumilo on serci passes cookies_from_browser."""
+        from typer.testing import CliRunner
+
+        from A_medio.cli import app
+
+        runner = CliRunner()
+
+        with patch("A_medio.cli.get_youtube_service") as mock_get:
+            mock_service = MagicMock()
+            mock_service.is_available.return_value = True
+            mock_service.search.return_value = [{"title": "V", "author": "A", "url": "https://youtu.be/v"}]
+            mock_get.return_value = mock_service
+
+            result = runner.invoke(app, [
+                "filmeto", "serci", "test",
+                "--kuketoj-de-retumilo", "floorp",
+            ])
+
+            assert result.exit_code == 0
+            _, kwargs = mock_service.search.call_args
+            assert kwargs.get("cookies_from_browser") == "floorp"
+
+    def test_eljuti_with_kuketoj(self) -> None:
+        """--kuketoj on eljuti passes cookies to download."""
+        from typer.testing import CliRunner
+
+        from A_medio.cli import app
+
+        runner = CliRunner()
+
+        with patch("A_medio.cli.get_youtube_service") as mock_get:
+            mock_service = MagicMock()
+            mock_service.is_available.return_value = True
+            mock_service.get_download_dir.return_value = "/tmp"
+            mock_service.download.return_value = [Path("/tmp/v.mp4")]
+            mock_get.return_value = mock_service
+
+            result = runner.invoke(app, [
+                "filmeto", "eljuti",
+                "https://youtu.be/abc",
+                "--kuketoj", "/tmp/cookies.txt",
+            ])
+
+            assert result.exit_code == 0
+            _, kwargs = mock_service.download.call_args
+            assert kwargs.get("cookies") == "/tmp/cookies.txt"
+
+    def test_kuketoj_helpo_command(self) -> None:
+        """kuketoj-helpo command shows cookie help."""
+        from typer.testing import CliRunner
+
+        from A_medio.cli import app
+
+        runner = CliRunner()
+
+        result = runner.invoke(app, ["filmeto", "kuketoj-helpo"])
+        assert result.exit_code == 0
+        assert "Kuketoj helpo" in result.stdout
+        assert "--kuketoj" in result.stdout
