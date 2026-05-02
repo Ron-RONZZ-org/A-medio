@@ -106,6 +106,19 @@ Certificate errors and empty results trigger automatic fallback retries.
 
 **CLI:** ``kuketoj-helpo`` command shows detailed setup instructions.
 
+### Download Estimation
+
+``--taksi`` flag on ``medio filmeto eljuti`` runs a dry-run ``extract_info``
+and shows estimated item count + total file size without downloading.
+
+### Search Extras
+
+| Flag | Command | Effect |
+|------|---------|--------|
+| ``--aldona`` / ``-a`` | ``serci`` | Show views, subscribers, duration |
+| ``--playlistoj`` / ``-P`` | ``serci`` | Search for playlists |
+| ``--limo`` / ``-lo`` | ``eljuti`` | Max items from a playlist |
+
 ### CSV Batch Download
 
 ``parse_csv_rows()`` parses CSV files into download specs for batch processing:
@@ -150,8 +163,8 @@ Results are cached in SQLite for offline search via `--local` flag.
 |---------|-------|----------|
 | Cookie/browser auth | ✅ [#6](https://github.com/Ron-RONZZ-org/A-medio/issues/6) | Done |
 | `ludi` (play video in temp dir) | [#7](https://github.com/Ron-RONZZ-org/A-medio/issues/7) | Medium |
-| Download size estimation | [#8](https://github.com/Ron-RONZZ-org/A-medio/issues/8) | Low |
-| Search enhancements (`--aldona`, `--playlistoj`, `--limo`) | [#9](https://github.com/Ron-RONZZ-org/A-medio/issues/9) | Low |
+| Download size estimation | ✅ [#8](https://github.com/Ron-RONZZ-org/A-medio/issues/8) | Done |
+| Search extras (`--aldona`, `--playlistoj`, `--limo`) | ✅ [#9](https://github.com/Ron-RONZZ-org/A-medio/issues/9) | Done |
 
 ## What to Avoid
 
