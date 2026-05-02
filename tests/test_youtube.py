@@ -13,6 +13,7 @@ from A_medio.services.youtube import (
     YtDlpWrapper,
     build_format_selector,
     build_subtitle_opts,
+    parse_csv_rows,
 )
 
 
@@ -297,15 +298,23 @@ class TestYouTubeService:
 class TestFilmetoEljutiCLI:
     """``medio filmeto eljuti`` CLI command."""
 
-    def test_eljuti_requires_url(self) -> None:
-        """Running eljuti without URL should fail."""
+    def test_eljuti_requires_url_or_csv(self) -> None:
+        """Running eljuti without URL and without --csv-dosiero shows error."""
         from typer.testing import CliRunner
 
         from A_medio.cli import app
 
         runner = CliRunner()
-        result = runner.invoke(app, ["filmeto", "eljuti"])
-        assert result.exit_code != 0
+
+        with patch("A_medio.cli.get_youtube_service") as mock_get:
+            mock_service = MagicMock()
+            mock_service.is_available.return_value = True
+            mock_get.return_value = mock_service
+
+            result = runner.invoke(app, ["filmeto", "eljuti"])
+
+            assert result.exit_code == 0
+            assert "Mankas URL" in result.stdout or "Missing URL" in result.stdout
 
     def test_eljuti_with_url(self) -> None:
         """Running eljuti with URL invokes download."""
@@ -386,3 +395,356 @@ class TestFilmetoEljutiCLI:
 
             assert "ne estas instalita" in result.stdout or "not installed" in result.stdout
             assert not mock_service.download.called
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# CSV parsing
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestParseCsvRows:
+    """parse_csv_rows — CSV batch download parsing."""
+
+    def test_missing_file(self) -> None:
+        """Non-existent CSV raises FileNotFoundError."""
+        with pytest.raises(FileNotFoundError, match="ne trovita"):
+            parse_csv_rows("/tmp/nonexistent_csv_test_file_xyz.csv")
+
+    def test_minimal_csv(self, tmp_path: Path) -> None:
+        """CSV with only celoj column works."""
+        csv_file = tmp_path / "batch.csv"
+        csv_file.write_text("celoj\nhttps://youtu.be/abc\n")
+
+        rows = parse_csv_rows(csv_file)
+        assert len(rows) == 1
+        assert rows[0]["targets"] == ["https://youtu.be/abc"]
+        assert rows[0]["resolution"] is None
+
+    def test_multiple_rows(self, tmp_path: Path) -> None:
+        """Multiple CSV rows produce multiple specs."""
+        csv_file = tmp_path / "multi.csv"
+        csv_file.write_text(
+            "celoj,difino\n"
+            "https://youtu.be/a,720\n"
+            "https://youtu.be/b,1080\n"
+        )
+
+        rows = parse_csv_rows(csv_file)
+        assert len(rows) == 2
+        assert rows[0]["targets"] == ["https://youtu.be/a"]
+        assert rows[0]["resolution"] == 720
+        assert rows[1]["targets"] == ["https://youtu.be/b"]
+        assert rows[1]["resolution"] == 1080
+
+    def test_bool_columns(self, tmp_path: Path) -> None:
+        """Bool columns (audio, filmeto) are parsed correctly."""
+        csv_file = tmp_path / "bool.csv"
+        csv_file.write_text(
+            "celoj,audio,filmeto\n"
+            "https://youtu.be/a,true,false\n"
+            "https://youtu.be/b,false,true\n"
+            "https://youtu.be/c,1,0\n"
+        )
+
+        rows = parse_csv_rows(csv_file)
+        assert rows[0]["audio_only"] is True
+        assert rows[0]["video_only"] is False
+        assert rows[1]["audio_only"] is False
+        assert rows[1]["video_only"] is True
+        assert rows[2]["audio_only"] is True
+        assert rows[2]["video_only"] is False
+
+    def test_state_inheritance(self, tmp_path: Path) -> None:
+        """Empty cells inherit from previous row or initial_state."""
+        csv_file = tmp_path / "inherit.csv"
+        csv_file.write_text(
+            "celoj,difino\n"
+            "https://youtu.be/a,720\n"
+            "https://youtu.be/b,\n"  # inherits 720
+        )
+
+        rows = parse_csv_rows(csv_file, initial_state={"resolution": 480})
+        assert rows[0]["resolution"] == 720  # explicit
+        assert rows[1]["resolution"] == 720  # inherited from row 1
+
+    def test_initial_state(self, tmp_path: Path) -> None:
+        """initial_state provides defaults for first row."""
+        csv_file = tmp_path / "init.csv"
+        csv_file.write_text("celoj\nhttps://youtu.be/a\n")
+
+        rows = parse_csv_rows(csv_file, initial_state={"output_dir": "/videos"})
+        assert rows[0]["output_dir"] == "/videos"
+
+    def test_esperanto_headers(self, tmp_path: Path) -> None:
+        """Esperanto column headers are recognized."""
+        csv_file = tmp_path / "eo.csv"
+        csv_file.write_text(
+            "celoj,difino,sonkvalito,audio,filmeto,vojo,subtitoloj\n"
+            "https://youtu.be/a,720,128,true,false,/output,\"eo,en\"\n"
+        )
+
+        rows = parse_csv_rows(csv_file)
+        assert rows[0]["targets"] == ["https://youtu.be/a"]
+        assert rows[0]["resolution"] == 720
+        assert rows[0]["audio_bitrate"] == 128
+        assert rows[0]["audio_only"] is True
+        assert rows[0]["video_only"] is False
+        assert rows[0]["output_dir"] == "/output"
+        assert rows[0]["subtitles"] == "eo,en"
+
+    def test_missing_celoj_column(self, tmp_path: Path) -> None:
+        """CSV without celoj column raises ValueError."""
+        csv_file = tmp_path / "bad.csv"
+        csv_file.write_text("titolo\nvideo\n")
+
+        with pytest.raises(ValueError, match="celoj"):
+            parse_csv_rows(csv_file)
+
+    def test_empty_csv(self, tmp_path: Path) -> None:
+        """CSV with no headers raises ValueError."""
+        csv_file = tmp_path / "empty.csv"
+        csv_file.write_text("")
+
+        with pytest.raises(ValueError, match="malplena"):
+            parse_csv_rows(csv_file)
+
+    def test_invalid_bool(self, tmp_path: Path) -> None:
+        """Invalid boolean value raises ValueError."""
+        csv_file = tmp_path / "badbool.csv"
+        csv_file.write_text("celoj,audio\nhttps://youtu.be/a,maybe\n")
+
+        with pytest.raises(ValueError, match="nevalida valoro"):
+            parse_csv_rows(csv_file)
+
+    def test_invalid_int(self, tmp_path: Path) -> None:
+        """Invalid integer value raises ValueError."""
+        csv_file = tmp_path / "badint.csv"
+        csv_file.write_text("celoj,difino\nhttps://youtu.be/a,notanumber\n")
+
+        with pytest.raises(ValueError, match="nevalida nombro"):
+            parse_csv_rows(csv_file)
+
+    def test_multiple_targets_in_cell(self, tmp_path: Path) -> None:
+        """Multiple URLs in one celoj cell are split."""
+        csv_file = tmp_path / "multiurl.csv"
+        csv_file.write_text("celoj\nhttps://youtu.be/a https://youtu.be/b\n")
+
+        rows = parse_csv_rows(csv_file)
+        assert len(rows) == 1
+        assert rows[0]["targets"] == ["https://youtu.be/a", "https://youtu.be/b"]
+
+    def test_english_headers(self, tmp_path: Path) -> None:
+        """English column headers are recognized."""
+        csv_file = tmp_path / "en.csv"
+        csv_file.write_text(
+            "targets,resolution,subtitles\n"
+            "https://youtu.be/a,720,en\n"
+        )
+
+        rows = parse_csv_rows(csv_file)
+        assert rows[0]["targets"] == ["https://youtu.be/a"]
+        assert rows[0]["resolution"] == 720
+        assert rows[0]["subtitles"] == "en"
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Batch download
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestBatchDownload:
+    """batch_download processes multiple specs."""
+
+    def test_batch_empty(self) -> None:
+        """Empty spec list returns empty results."""
+        service = YouTubeService()
+        results = service.batch_download([])
+        assert results == []
+
+    def test_batch_single_spec(self) -> None:
+        """Single spec with one URL calls download once."""
+        service = YouTubeService()
+        with patch.object(service, "download", return_value=[Path("/v/a.mp4")]) as mock_dl:
+            results = service.batch_download([
+                {"targets": ["https://youtu.be/a"], "resolution": 720},
+            ])
+
+        assert len(results) == 1
+        assert results[0].success is True
+        assert results[0].url == "https://youtu.be/a"
+        assert results[0].files == [Path("/v/a.mp4")]
+        mock_dl.assert_called_once_with("https://youtu.be/a", resolution=720)
+
+    def test_batch_multiple_specs(self) -> None:
+        """Multiple specs each call download."""
+        service = YouTubeService()
+        with patch.object(service, "download", return_value=[Path("/v/a.mp4")]) as mock_dl:
+            results = service.batch_download([
+                {"targets": ["https://youtu.be/a"]},
+                {"targets": ["https://youtu.be/b", "https://youtu.be/c"]},
+            ])
+
+        assert len(results) == 3
+        assert mock_dl.call_count == 3
+
+    def test_batch_handles_download_failure(self) -> None:
+        """When download returns [], result is failure."""
+        service = YouTubeService()
+        with patch.object(service, "download", return_value=[]):
+            results = service.batch_download([
+                {"targets": ["https://youtu.be/a"]},
+            ])
+
+        assert len(results) == 1
+        assert results[0].success is False
+
+    def test_batch_handles_exception(self) -> None:
+        """Exception in download is caught and reported."""
+        service = YouTubeService()
+        with patch.object(service, "download", side_effect=RuntimeError("oops")):
+            results = service.batch_download([
+                {"targets": ["https://youtu.be/a"]},
+            ])
+
+        assert len(results) == 1
+        assert results[0].success is False
+        assert "oops" in results[0].error
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# CLI CSV integration
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestFilmetoEljutiCSV:
+    """``medio filmeto eljuti --csv-dosiero`` CLI command."""
+
+    def test_csv_flag_accepted(self, tmp_path: Path) -> None:
+        """CLI accepts --csv-dosiero flag."""
+        csv_file = tmp_path / "batch.csv"
+        csv_file.write_text("celoj\nhttps://youtu.be/abc\n")
+
+        from typer.testing import CliRunner
+
+        from A_medio.cli import app
+
+        runner = CliRunner()
+
+        with patch("A_medio.cli.get_youtube_service") as mock_get:
+            mock_service = MagicMock()
+            mock_service.is_available.return_value = True
+            mock_service.batch_download.return_value = []
+            mock_get.return_value = mock_service
+
+            result = runner.invoke(app, [
+                "filmeto", "eljuti",
+                "--csv-dosiero", str(csv_file),
+            ])
+
+            assert result.exit_code == 0
+            mock_service.batch_download.assert_called_once()
+
+    def test_csv_with_cli_flags(self, tmp_path: Path) -> None:
+        """CLI flags are passed as initial_state to parse_csv_rows."""
+        csv_file = tmp_path / "batch2.csv"
+        csv_file.write_text("celoj\nhttps://youtu.be/abc\n")
+
+        from typer.testing import CliRunner
+
+        from A_medio.cli import app
+
+        runner = CliRunner()
+
+        with patch("A_medio.cli.get_youtube_service") as mock_get:
+            mock_service = MagicMock()
+            mock_service.is_available.return_value = True
+            mock_service.batch_download.return_value = []
+            mock_get.return_value = mock_service
+
+            result = runner.invoke(app, [
+                "filmeto", "eljuti",
+                "--csv-dosiero", str(csv_file),
+                "--difino", "720",
+                "--audio",
+            ])
+
+            assert result.exit_code == 0
+            # batch_download was called (specs parsed from CSV + initial state)
+            mock_service.batch_download.assert_called_once()
+
+    def test_csv_file_not_found(self, tmp_path: Path) -> None:
+        """Non-existent CSV file shows error."""
+        from typer.testing import CliRunner
+
+        from A_medio.cli import app
+
+        runner = CliRunner()
+
+        with patch("A_medio.cli.get_youtube_service") as mock_get:
+            mock_service = MagicMock()
+            mock_service.is_available.return_value = True
+            mock_get.return_value = mock_service
+
+            result = runner.invoke(app, [
+                "filmeto", "eljuti",
+                "--csv-dosiero", str(tmp_path / "nonexistent.csv"),
+            ])
+
+            # Typer's exists=True validator catches this before our code
+            assert result.exit_code != 0
+
+    def test_csv_with_results(self, tmp_path: Path) -> None:
+        """CSV batch download displays results."""
+        csv_file = tmp_path / "batch3.csv"
+        csv_file.write_text("celoj\nhttps://youtu.be/abc\n")
+
+        from typer.testing import CliRunner
+
+        from A_medio.cli import app
+        from A_medio.services.youtube import BatchResult
+
+        runner = CliRunner()
+
+        with patch("A_medio.cli.get_youtube_service") as mock_get:
+            mock_service = MagicMock()
+            mock_service.is_available.return_value = True
+            mock_service.batch_download.return_value = [
+                BatchResult(
+                    row=1, url="https://youtu.be/abc", success=True,
+                    files=[Path("/v/abc.mp4")],
+                ),
+            ]
+            mock_get.return_value = mock_service
+
+            result = runner.invoke(app, [
+                "filmeto", "eljuti",
+                "--csv-dosiero", str(csv_file),
+            ])
+
+            assert result.exit_code == 0
+            assert "abc.mp4" in result.stdout
+
+    def test_csv_no_url_needed(self, tmp_path: Path) -> None:
+        """When using --csv-dosiero, URL argument is not required."""
+        csv_file = tmp_path / "batch4.csv"
+        csv_file.write_text("celoj\nhttps://youtu.be/abc\n")
+
+        from typer.testing import CliRunner
+
+        from A_medio.cli import app
+
+        runner = CliRunner()
+
+        with patch("A_medio.cli.get_youtube_service") as mock_get:
+            mock_service = MagicMock()
+            mock_service.is_available.return_value = True
+            mock_service.batch_download.return_value = []
+            mock_get.return_value = mock_service
+
+            # No URL argument — should work because --csv-dosiero is provided
+            result = runner.invoke(app, [
+                "filmeto", "eljuti",
+                "--csv-dosiero", str(csv_file),
+            ])
+
+            assert result.exit_code == 0

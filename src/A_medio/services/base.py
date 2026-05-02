@@ -63,3 +63,19 @@ class MediaService(ABC):
             List of paths to downloaded files.
         """
         ...
+
+    @abstractmethod
+    def batch_download(
+        self,
+        specs: list[dict[str, Any]],
+    ) -> list[Any]:
+        """Download multiple items from a list of download specs.
+
+        Args:
+            specs: List of download-spec dicts, each with at least
+                ``"targets"`` (list of URL strings).
+
+        Returns:
+            List of result objects (one per URL).
+        """
+        ...

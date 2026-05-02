@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any, Optional
 
 import typer
@@ -179,7 +180,7 @@ def filmeto_ludi(url: str) -> None:
 
 @filmeto.command("eljuti")
 def filmeto_eljuti(
-    url: str,
+    url: Optional[str] = typer.Argument(None, help="YouTube URL to download. Not needed when using --csv-dosiero."),
     output_dir: Optional[str] = typer.Option(None, "--output", "-o", help="Download directory (default: from config)."),
     resolution: Optional[int] = typer.Option(None, "--difino", "-d", help="Max video resolution (e.g. 720, 1080)."),
     audio_only: bool = typer.Option(False, "--audio", "-A", help="Extract audio only."),
@@ -189,15 +190,27 @@ def filmeto_eljuti(
         None, "--subtitoloj", "--sub",
         help="Subtitles: 'auto', 'all', or comma-separated language codes (e.g. 'eo,en,fr').",
     ),
+    csv_dosiero: Optional[Path] = typer.Option(
+        None, "--csv-dosiero", "--csv",
+        help="CSV file for batch download. Columns: celoj,difino,sonkvalito,audio,filmeto,vojo,subtitoloj.",
+        exists=True,
+        dir_okay=False,
+        readable=True,
+    ),
 ) -> None:
     """Download a video/audio from YouTube.
+
+    Provide a single URL as argument, or use --csv-dosiero for batch download.
 
     Examples:
         medio filmeto eljuti https://www.youtube.com/watch?v=...
         medio filmeto eljuti https://youtu.be/... --output /path/to/dir
         medio filmeto eljuti https://youtu.be/... --audio
         medio filmeto eljuti https://youtu.be/... --difino 1080 --subtitoloj eo,en
+        medio filmeto eljuti --csv-dosiero elsutoj.csv
     """
+    from A_medio.services.youtube import parse_csv_rows
+
     youtube = get_youtube_service()
 
     if not youtube.is_available():
@@ -205,6 +218,66 @@ def filmeto_eljuti(
             "yt-dlp ne estas instalita. Instalu ĝin por elŝuti.",
             "yt-dlp is not installed. Install it to download.",
             "yt-dlp n'est pas installé. Installez-le pour télécharger.",
+        ))
+        return
+
+    # ── CSV batch mode ────────────────────────────────────────────────────
+    if csv_dosiero is not None:
+        # Build initial state from CLI flags
+        initial: dict[str, Any] = {}
+        if output_dir is not None:
+            initial["output_dir"] = output_dir
+        if resolution is not None:
+            initial["resolution"] = resolution
+        if audio_only:
+            initial["audio_only"] = True
+        if video_only:
+            initial["video_only"] = True
+        if audio_bitrate is not None:
+            initial["audio_bitrate"] = audio_bitrate
+        if subtitles is not None:
+            initial["subtitles"] = subtitles
+
+        try:
+            specs = parse_csv_rows(csv_dosiero, initial_state=initial)
+        except (FileNotFoundError, ValueError) as exc:
+            error(str(exc))
+            return
+
+        if not specs:
+            info(tr_multi(
+                "Neniuj specifoj trovita en CSV.",
+                "No specs found in CSV.",
+                "Aucune spécification trouvée dans le CSV.",
+            ))
+            return
+
+        results = youtube.batch_download(specs)
+
+        success_count = sum(1 for r in results if r.success)
+        fail_count = sum(1 for r in results if not r.success)
+
+        info(tr_multi(
+            f"Pretigis {len(results)} celo(j)n: {success_count} sukcese, {fail_count} malsukcese.",
+            f"Processed {len(results)} target(s): {success_count} succeeded, {fail_count} failed.",
+            f"Traité {len(results)} cible(s) : {success_count} réussi, {fail_count} échoué.",
+        ))
+
+        for r in results:
+            if r.success:
+                info(f"  ✓ {r.url}")
+                for f in r.files:
+                    info(f"    {f}")
+            else:
+                error(f"  ✗ {r.url}: {r.error}")
+        return
+
+    # ── Single URL mode ───────────────────────────────────────────────────
+    if not url:
+        error(tr_multi(
+            "Mankas URL. Uzu: medio filmeto eljuti <URL> aŭ --csv-dosiero <dosiero>.",
+            "Missing URL. Use: medio filmeto eljuti <URL> or --csv-dosiero <file>.",
+            "URL manquante. Utilisez : medio filmeto eljuti <URL> ou --csv-dosiero <fichier>.",
         ))
         return
 
