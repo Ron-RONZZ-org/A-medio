@@ -45,6 +45,7 @@ If you need a utility that should be in A-core:
 src/A_medio/
 ├── __init__.py       # Plugin exports
 ├── cli.py           # Typer app with subcommands
+├── config.py        # Plugin-level config (namespaced under A.config)
 ├── services/
 │   ├── __init__.py  # Service exports
 │   ├── base.py      # Base MediaService interface
@@ -56,13 +57,35 @@ src/A_medio/
 ### Service Pattern
 
 Each media type has its own service file:
-- `services/youtube.py` — YouTube video search via yt-dlp
+- `services/youtube.py` — YouTube video search + download via yt-dlp
 - Future: `services/photo.py`, `services/audio.py`
 
 Services implement `MediaService` base class with:
 - `is_available()` — runtime detection
 - `search()` — search with filters
 - `get_by_id()` — retrieve by ID
+- `download()` — download media with format/subtitle options
+
+### yt-dlp Wrapper (`services/youtube.py`)
+
+Uses the **yt-dlp Python library** (not subprocess) for all operations:
+
+| Component | Purpose |
+|-----------|---------|
+| `YtDlpWrapper` | Singleton with lazy import + availability detection |
+| `YouTubeVideo` | Data object for search results |
+| `YouTubeService` | Search, download, local cache via CRUDService |
+| `build_format_selector()` | Build format strings (resolution, audio-only, video-only) |
+| `build_subtitle_opts()` | Build subtitle options (auto, all, or specific langs) |
+
+**Format selection:**
+- `bestaudio` — audio-only extraction
+- `bestvideo[height<=N]` — video stream only
+- `best[height<=N]` — combined stream with resolution cap
+
+**Subtitle options:**
+- `auto` / `all` — download all available subtitles
+- Comma-separated language codes (e.g. `eo,en,fr`)
 
 ### FTS5 Search
 
