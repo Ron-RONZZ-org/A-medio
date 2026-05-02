@@ -125,6 +125,15 @@ Results are cached in SQLite for offline search via `--local` flag.
 5. Tests required for all modules
 6. Use WAL mode for SQLite
 
+## Known Gaps (Not Yet Ported from Legacy)
+
+| Feature | Issue | Priority |
+|---------|-------|----------|
+| Cookie/browser auth (`--kuketoj`, `--kuketoj-de-retumilo`, `kuketoj-helpo`) | [#6](https://github.com/Ron-RONZZ-org/A-medio/issues/6) | High |
+| `ludi` (play video in temp dir) | [#7](https://github.com/Ron-RONZZ-org/A-medio/issues/7) | Medium |
+| Download size estimation | [#8](https://github.com/Ron-RONZZ-org/A-medio/issues/8) | Low |
+| Search enhancements (`--aldona`, `--playlistoj`, `--limo`) | [#9](https://github.com/Ron-RONZZ-org/A-medio/issues/9) | Low |
+
 ## What to Avoid
 
 - Don't duplicate A-core utilities
