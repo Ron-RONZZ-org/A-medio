@@ -28,12 +28,26 @@ Requires **A-core** (automatically installed as dependency).
 ## Usage
 
 ```bash
-A medio filmeto serci <query>  # Search videos
+# Search YouTube videos
+A medio filmeto serci "python tutorial"
+A medio filmeto serci "music" --filter author --regex "official"
+A medio filmeto serci "news" --local  # Search local cache only
+
+# Other commands
 A medio filmeto ludi <url>     # Play video
 A medio filmeto eljuti <url>   # Download video
-A medio foto ls             # List photos
-A medio audio ls            # List audio/podcasts
+A medio foto ls                # List photos
+A medio audio ls               # List audio/podcasts
 ```
+
+### YouTube Search Options
+
+| Option | Description |
+|--------|-------------|
+| `--limit, -l` | Max results (default: 10) |
+| `--filter, -f` | Field to filter (title, description, author) |
+| `--regex, -r` | Regex pattern to match |
+| `--local` | Search local cache only (offline) |
 
 ## Commands
 

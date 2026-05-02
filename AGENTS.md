@@ -45,10 +45,33 @@ If you need a utility that should be in A-core:
 src/A_medio/
 ├── __init__.py       # Plugin exports
 ├── cli.py           # Typer app with subcommands
-├── service.py     # Business logic (downloading, playback)
+├── services/
+│   ├── __init__.py  # Service exports
+│   ├── base.py      # Base MediaService interface
+│   └── youtube.py   # YouTube-specific service (yt-dlp wrapper)
 └── data/
-    └── storage.py # SQLite (uses A.data.base)
+    └── storage.py   # SQLite (uses A.data.base)
 ```
+
+### Service Pattern
+
+Each media type has its own service file:
+- `services/youtube.py` — YouTube video search via yt-dlp
+- Future: `services/photo.py`, `services/audio.py`
+
+Services implement `MediaService` base class with:
+- `is_available()` — runtime detection
+- `search()` — search with filters
+- `get_by_id()` — retrieve by ID
+
+### FTS5 Search
+
+YouTube videos use FTS5 for full-text search on:
+- title
+- description
+- author
+
+Results are cached in SQLite for offline search via `--local` flag.
 
 ## Code Standards
 
