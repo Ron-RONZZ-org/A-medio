@@ -1,6 +1,7 @@
 """Base media service interface."""
 
 from abc import ABC, abstractmethod
+from pathlib import Path
 from typing import Any
 
 
@@ -9,7 +10,11 @@ class MediaService(ABC):
 
     @abstractmethod
     def is_available(self) -> bool:
-        """Check if the service is available (e.g., required tool installed)."""
+        """Check if the service is available (e.g., required tool installed).
+
+        Returns:
+            True if the underlying tool/backend is available.
+        """
         ...
 
     @abstractmethod
@@ -34,5 +39,27 @@ class MediaService(ABC):
 
         Returns:
             Media item dict or None if not found.
+        """
+        ...
+
+    @abstractmethod
+    def download(
+        self,
+        url: str,
+        **opts: Any,
+    ) -> list[Path]:
+        """Download a media item.
+
+        Args:
+            url: URL of the media to download.
+            **opts: Additional download options:
+                - output_dir: Output directory path.
+                - resolution: Max height (e.g. 720, 1080).
+                - audio_only: Extract audio only.
+                - video_only: Video stream only (no audio).
+                - subtitles: Subtitle spec (auto, all, or comma-separated langs).
+
+        Returns:
+            List of paths to downloaded files.
         """
         ...

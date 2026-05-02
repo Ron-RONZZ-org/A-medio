@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from A import ensure_dirs as _ensure_dirs
+from A.core.paths import data_dir
 from A.data.base import SQLiteDB
 
-_DATA_DIR: Path = Path.home() / ".local" / "share" / "A"
+_DATA_DIR = data_dir()
 
 # ──────────────────────────────────────────────────────────────────────────────
 # YouTube videos (cached search results)
@@ -103,16 +103,14 @@ CREATE TABLE IF NOT EXISTS audioj (
 # Indexes
 # ──────────────────────────────────────────────────────────────────────────────
 
-_CREATE_INDEXES = """
-CREATE INDEX IF NOT EXISTS idx_filmetoj_titolo ON filmetoj(titolo);
-CREATE INDEX IF NOT EXISTS idx_fotoj_nomo ON fotoj(nomo);
-CREATE INDEX IF NOT EXISTS idx_audioj_titolo ON audioj(titolo);
-"""
+_IDX_FILMETOJ_TITOLO = "CREATE INDEX IF NOT EXISTS idx_filmetoj_titolo ON filmetoj(titolo);"
+_IDX_FOTOJ_NOMO = "CREATE INDEX IF NOT EXISTS idx_fotoj_nomo ON fotoj(nomo);"
+_IDX_AUDIOJ_TITOLO = "CREATE INDEX IF NOT EXISTS idx_audioj_titolo ON audioj(titolo);"
 
 
 def ensure_dirs() -> None:
     """Ensure data directory exists."""
-    _ensure_dirs(_DATA_DIR)
+    _DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def get_db(path: Path = _DATA_DIR / "medio.db") -> SQLiteDB:
@@ -126,7 +124,9 @@ def get_db(path: Path = _DATA_DIR / "medio.db") -> SQLiteDB:
         _CREATE_FILMETOJ,
         _CREATE_FOTOJ,
         _CREATE_AUDIOJ,
-        _CREATE_INDEXES,
+        _IDX_FILMETOJ_TITOLO,
+        _IDX_FOTOJ_NOMO,
+        _IDX_AUDIOJ_TITOLO,
     ]
     for stmt in stmts:
         db.execute(stmt)
