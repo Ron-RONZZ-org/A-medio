@@ -136,7 +136,7 @@ def filmeto_serci(
     limit: int = 10,
     filter_field: Optional[str] = typer.Option(None, "--filter", "-f", help=tr_multi("Filtrila kampo (titolo, priskribo, aŭtoro)", "Filter field (title, description, author)", "Champ de filtrage (titre, description, auteur)")),
     regex: Optional[str] = typer.Option(None, "--regex", "-r", help=tr_multi("Regex ŝablono por kongruigi", "Regex pattern to match", "Motif Regex à faire correspondre")),
-    local_only: bool = typer.Option(False, "--local", "-l", help="Search local cache only"),
+    local_only: bool = typer.Option(False, "--local", "-l", help=tr_multi("Serĉi nur lokan kaŝmemoron", "Search local cache only", "Rechercher uniquement le cache local")),
     aldona: bool = typer.Option(False, "--aldona", "-a", help=tr_multi("Montri krominformojn (vidadoj,abonantoj).", "Show extra info (views, subscribers).", "Afficher les infos supplémentaires (vues, abonnés).")),
     playlistoj: bool = typer.Option(False, "--playlistoj", "-P", help=tr_multi("Serĉi ludlistojn anstataŭ videojn.", "Search playlists instead of videos.", "Rechercher des playlists au lieu de vidéos.")),
     kuketoj: Optional[str] = typer.Option(None, "--kuketoj", help=tr_multi("Vojo al cookies.txt por YouTube aŭtentigo.", "Path to cookies.txt for YouTube authentication.", "Chemin vers cookies.txt pour l'authentification YouTube.")),
@@ -169,12 +169,8 @@ def filmeto_serci(
     youtube = get_youtube_service()
 
     if not youtube.is_available() and not local_only:
-        error(tr_multi(
-            "yt-dlp ne estas instalita. Uzu --local por serĉi en la loka kaŝmemoro.",
-            "yt-dlp is not installed. Use --local to search local cache.",
-            "yt-dlp n'est pas installé. Utilisez --local pour chercher dans le cache local.",
-        ))
-        return
+        if not youtube.ensure_installed():
+            return
 
     if local_only:
         results = youtube.search_local(query, limit=limit)
@@ -284,12 +280,8 @@ def filmeto_eljuti(
     youtube = get_youtube_service()
 
     if not youtube.is_available():
-        error(tr_multi(
-            "yt-dlp ne estas instalita. Instalu ĝin por elŝuti.",
-            "yt-dlp is not installed. Install it to download.",
-            "yt-dlp n'est pas installé. Installez-le pour télécharger.",
-        ))
-        return
+        if not youtube.ensure_installed():
+            return
 
     # ── CSV batch mode ────────────────────────────────────────────────────
     if csv_dosiero is not None:

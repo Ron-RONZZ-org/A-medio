@@ -40,11 +40,19 @@ def _get_ytdl_class() -> type[YoutubeDL]:
 
     Returns:
         The ``YoutubeDL`` class.
+
+    Raises:
+        RuntimeError: If yt-dlp is not available.
     """
     global _ytdl_class
     if _ytdl_class is None:
-        from yt_dlp import YoutubeDL  # type: ignore[import-untyped]
-        _ytdl_class = YoutubeDL
+        try:
+            from yt_dlp import YoutubeDL  # type: ignore[import-untyped]
+            _ytdl_class = YoutubeDL
+        except ImportError as exc:
+            raise RuntimeError(
+                "yt-dlp is not available. Call ensure_installed() first."
+            ) from exc
     return _ytdl_class
 
 
@@ -53,11 +61,19 @@ def _get_download_error() -> type[DownloadError]:
 
     Returns:
         The ``DownloadError`` exception class.
+
+    Raises:
+        RuntimeError: If yt-dlp is not available.
     """
     global _download_error_class
     if _download_error_class is None:
-        from yt_dlp.utils import DownloadError  # type: ignore[import-untyped]
-        _download_error_class = DownloadError
+        try:
+            from yt_dlp.utils import DownloadError  # type: ignore[import-untyped]
+            _download_error_class = DownloadError
+        except ImportError as exc:
+            raise RuntimeError(
+                "yt-dlp is not available. Call ensure_installed() first."
+            ) from exc
     return _download_error_class
 
 
@@ -679,6 +695,53 @@ class YtDlpWrapper:
                 except ImportError:
                     self._available = False
         return self._available
+
+    def ensure_installed(self) -> bool:
+        """Ensure yt-dlp is installed, prompting the user if missing.
+
+        If yt-dlp is not available, asks the user whether to install it
+        via ``pip install yt-dlp``.  If they accept, installs and re-checks
+        availability.
+
+        Returns:
+            True if yt-dlp is available (was already or became so).
+        """
+        if self.is_available():
+            return True
+
+        import typer
+
+        answer = typer.prompt(
+            tr_multi(
+                "yt-dlp ne estas instalita. Ĉu instali ĝin? (j/N)",
+                "yt-dlp is not installed. Install it? (y/N)",
+                "yt-dlp n'est pas installé. L'installer ? (o/N)",
+            ),
+            default="n",
+        )
+        if answer.strip().lower() not in {"j", "jes", "y", "yes"}:
+            return False
+
+        from A import run as a_run
+
+        import sys
+
+        info(tr_multi(
+            "Instalante yt-dlp...",
+            "Installing yt-dlp...",
+            "Installation de yt-dlp...",
+        ))
+        result = a_run(sys.executable, "-m", "pip", "install", "yt-dlp", timeout=120)
+        if result.returncode == 0:
+            self._available = None  # reset cache
+            return self.is_available()
+
+        error(tr_multi(
+            "Malsukcesis instali yt-dlp. Instalu permane: pip install yt-dlp",
+            "Failed to install yt-dlp. Install manually: pip install yt-dlp",
+            "Échec de l'installation de yt-dlp. Installez manuellement : pip install yt-dlp",
+        ))
+        return False
 
     # ── factory ───────────────────────────────────────────────────────────
 
