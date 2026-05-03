@@ -377,7 +377,7 @@ class TestFilmetoEljutiCLI:
             )
 
     def test_eljuti_reports_unavailable(self) -> None:
-        """Running eljuti when yt-dlp unavailable shows error."""
+        """Running eljuti when yt-dlp unavailable prompts to install."""
         from typer.testing import CliRunner
 
         from A_medio.cli import app
@@ -387,6 +387,7 @@ class TestFilmetoEljutiCLI:
         with patch("A_medio.cli.get_youtube_service") as mock_get:
             mock_service = MagicMock()
             mock_service.is_available.return_value = False
+            mock_service.ensure_installed.return_value = False
             mock_get.return_value = mock_service
 
             result = runner.invoke(app, [
@@ -394,7 +395,8 @@ class TestFilmetoEljutiCLI:
                 "https://youtu.be/abc123",
             ])
 
-            assert "ne estas instalita" in result.stdout or "not installed" in result.stdout
+            # ensure_installed was called and declined
+            mock_service.ensure_installed.assert_called_once()
             assert not mock_service.download.called
 
 
