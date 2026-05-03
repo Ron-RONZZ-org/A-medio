@@ -923,6 +923,13 @@ class YouTubeService(MediaService):
         """Check if yt-dlp is installed."""
         return self._wrapper.is_available()
 
+    def ensure_installed(self) -> bool:
+        """Ensure yt-dlp is installed, prompting the user if missing.
+
+        Delegates to :meth:`YtDlpWrapper.ensure_installed`.
+        """
+        return self._wrapper.ensure_installed()
+
     def get_download_dir(self) -> str:
         """Return the configured download directory."""
         return get_download_dir()

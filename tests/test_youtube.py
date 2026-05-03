@@ -230,6 +230,20 @@ class TestYouTubeService:
         with patch.object(service._wrapper, "is_available", return_value=True):
             assert service.is_available() is True
 
+    def test_ensure_installed_delegates_to_wrapper(self) -> None:
+        """ensure_installed() delegates to YtDlpWrapper."""
+        service = YouTubeService()
+        with patch.object(service._wrapper, "ensure_installed", return_value=True) as mock_ei:
+            result = service.ensure_installed()
+            assert result is True
+            mock_ei.assert_called_once()
+
+    def test_ensure_installed_forwards_false(self) -> None:
+        """ensure_installed() returns False when wrapper returns False."""
+        service = YouTubeService()
+        with patch.object(service._wrapper, "ensure_installed", return_value=False):
+            assert service.ensure_installed() is False
+
     def test_get_download_dir(self) -> None:
         """get_download_dir returns a string."""
         service = YouTubeService()
@@ -375,8 +389,8 @@ class TestFilmetoEljutiCLI:
                 subtitles="eo,en",
             )
 
-    def test_eljuti_reports_unavailable(self) -> None:
-        """Running eljuti when yt-dlp unavailable prompts to install."""
+    def test_eljuti_calls_ensure_installed(self) -> None:
+        """eljuti calls ensure_installed when yt-dlp unavailable."""
         from typer.testing import CliRunner
 
         from A_medio.cli import app
@@ -394,9 +408,32 @@ class TestFilmetoEljutiCLI:
                 "https://youtu.be/abc123",
             ])
 
-            # ensure_installed was called and declined
             mock_service.ensure_installed.assert_called_once()
             assert not mock_service.download.called
+
+    def test_eljuti_proceeds_when_install_accepted(self) -> None:
+        """eljuti proceeds with download when ensure_installed returns True."""
+        from typer.testing import CliRunner
+
+        from A_medio.cli import app
+
+        runner = CliRunner()
+
+        with patch("A_medio.cli.get_youtube_service") as mock_get:
+            mock_service = MagicMock()
+            mock_service.is_available.side_effect = [False, True]  # unavailable → install → now available
+            mock_service.ensure_installed.return_value = True
+            mock_service.get_download_dir.return_value = "/tmp"
+            mock_service.download.return_value = []
+            mock_get.return_value = mock_service
+
+            result = runner.invoke(app, [
+                "filmeto", "eljuti",
+                "https://youtu.be/abc123",
+            ])
+
+            mock_service.ensure_installed.assert_called_once()
+            mock_service.download.assert_called_once()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1297,6 +1334,51 @@ class TestCLISearchExtras:
             # Should call search with "python playlist"
             call_args, _ = mock_service.search.call_args
             assert "playlist" in call_args[0]
+
+    def test_serci_calls_ensure_installed(self) -> None:
+        """serci calls ensure_installed when yt-dlp unavailable."""
+        from typer.testing import CliRunner
+
+        from A_medio.cli import app
+
+        runner = CliRunner()
+
+        with patch("A_medio.cli.get_youtube_service") as mock_get:
+            mock_service = MagicMock()
+            mock_service.is_available.return_value = False
+            mock_service.ensure_installed.return_value = False
+            mock_get.return_value = mock_service
+
+            result = runner.invoke(app, [
+                "filmeto", "serci", "test",
+            ])
+
+            mock_service.ensure_installed.assert_called_once()
+            assert not mock_service.search.called
+
+    def test_serci_proceeds_when_install_accepted(self) -> None:
+        """serci proceeds with search when ensure_installed returns True."""
+        from typer.testing import CliRunner
+
+        from A_medio.cli import app
+
+        runner = CliRunner()
+
+        with patch("A_medio.cli.get_youtube_service") as mock_get:
+            mock_service = MagicMock()
+            mock_service.is_available.side_effect = [False, True]
+            mock_service.ensure_installed.return_value = True
+            mock_service.search.return_value = [{
+                "title": "Test Video", "author": "A", "url": "https://youtu.be/v",
+            }]
+            mock_get.return_value = mock_service
+
+            result = runner.invoke(app, [
+                "filmeto", "serci", "test",
+            ])
+
+            mock_service.ensure_installed.assert_called_once()
+            mock_service.search.assert_called_once()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
