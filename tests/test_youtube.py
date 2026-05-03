@@ -120,35 +120,34 @@ class TestYtDlpWrapper:
         b = YtDlpWrapper()
         assert a is b
 
-    @patch("shutil.which", return_value=None)
-    def test_not_available_without_yt_dlp(self, mock_which: MagicMock) -> None:
-        """Returns False when neither binary nor library is found."""
-        wrapper = YtDlpWrapper()
-        wrapper._available = None  # Reset cache for test
-
-        with patch.dict("sys.modules", {"yt_dlp": None}):
-            # Force import to fail
-            import builtins
-
-            original_import = builtins.__import__
-
-            def fake_import(name, *args, **kwargs):
-                if name == "yt_dlp":
-                    raise ImportError
-                return original_import(name, *args, **kwargs)
-
-            with patch.object(builtins, "__import__", fake_import):
-                assert wrapper.is_available() is False
-
-    @patch("shutil.which", return_value="/usr/bin/yt-dlp")
-    def test_available_with_binary(self, mock_which: MagicMock) -> None:
-        """Returns True when yt-dlp binary is found."""
+    def test_not_available_without_yt_dlp(self) -> None:
+        """Returns False when yt-dlp library is not installed."""
         wrapper = YtDlpWrapper()
         wrapper._available = None
-        assert wrapper.is_available() is True
 
-    @patch("shutil.which", return_value=None)
-    def test_create_ydl_raises_when_unavailable(self, mock_which: MagicMock) -> None:
+        import builtins
+
+        original_import = builtins.__import__
+
+        def fake_import(name, *args, **kwargs):
+            if name == "yt_dlp":
+                raise ImportError
+            return original_import(name, *args, **kwargs)
+
+        with patch.object(builtins, "__import__", fake_import):
+            assert wrapper.is_available() is False
+
+    def test_available_with_import(self) -> None:
+        """Returns True when yt-dlp Python library is importable."""
+        import types
+        mock_mod = types.ModuleType("yt_dlp")
+        mock_mod.YoutubeDL = MagicMock()
+        with patch.dict("sys.modules", {"yt_dlp": mock_mod}):
+            wrapper = YtDlpWrapper()
+            wrapper._available = None
+            assert wrapper.is_available() is True
+
+    def test_create_ydl_raises_when_unavailable(self) -> None:
         """``create_ydl()`` raises RuntimeError when yt-dlp is unavailable."""
         wrapper = YtDlpWrapper()
         wrapper._available = None

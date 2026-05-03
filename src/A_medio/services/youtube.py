@@ -5,7 +5,6 @@ from __future__ import annotations
 import csv
 import json
 import re
-import shutil
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -675,25 +674,24 @@ class YtDlpWrapper:
     # ── availability ──────────────────────────────────────────────────────
 
     def is_available(self) -> bool:
-        """Check whether yt-dlp is available.
+        """Check whether yt-dlp Python library is available.
 
-        Checks for the ``yt-dlp`` CLI binary first, then tries importing
-        the Python library.  The result is cached.
+        Tries importing ``yt_dlp.YoutubeDL`` — the actual module used
+        by this wrapper.  The result is cached.
+
+        Does **not** check for the ``yt-dlp`` CLI binary, because all
+        operations use the Python library directly.
 
         Returns:
-            True if yt-dlp can be used.
+            True if ``yt_dlp`` can be imported and used.
         """
         if self._available is None:
-            # Check CLI binary first
-            if shutil.which("yt-dlp") is not None:
+            try:
+                from yt_dlp import YoutubeDL  # type: ignore[import-untyped]
+                _ = YoutubeDL
                 self._available = True
-            else:
-                # Fall back to Python library
-                try:
-                    import yt_dlp  # type: ignore[import-untyped]  # noqa: F401
-                    self._available = True
-                except ImportError:
-                    self._available = False
+            except ImportError:
+                self._available = False
         return self._available
 
     def ensure_installed(self) -> bool:
