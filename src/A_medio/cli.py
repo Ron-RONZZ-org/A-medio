@@ -134,12 +134,12 @@ def filmeto_kuketoj_helpo() -> None:
 def filmeto_serci(
     query: str,
     limit: int = 10,
-    filter_field: Optional[str] = typer.Option(None, "--filter", "-f", help="Filter field (title, description, author)"),
-    regex: Optional[str] = typer.Option(None, "--regex", "-r", help="Regex pattern to match"),
+    filter_field: Optional[str] = typer.Option(None, "--filter", "-f", help=tr_multi("Filtrila kampo (titolo, priskribo, aŭtoro)", "Filter field (title, description, author)", "Champ de filtrage (titre, description, auteur)")),
+    regex: Optional[str] = typer.Option(None, "--regex", "-r", help=tr_multi("Regex ŝablono por kongruigi", "Regex pattern to match", "Motif Regex à faire correspondre")),
     local_only: bool = typer.Option(False, "--local", "-l", help="Search local cache only"),
-    aldona: bool = typer.Option(False, "--aldona", "-a", help="Show extra info (views, subscribers)."),
-    playlistoj: bool = typer.Option(False, "--playlistoj", "-P", help="Search playlists instead of videos."),
-    kuketoj: Optional[str] = typer.Option(None, "--kuketoj", help="Path to cookies.txt for YouTube authentication."),
+    aldona: bool = typer.Option(False, "--aldona", "-a", help=tr_multi("Montri krominformojn (vidadoj,abonantoj).", "Show extra info (views, subscribers).", "Afficher les infos supplémentaires (vues, abonnés).")),
+    playlistoj: bool = typer.Option(False, "--playlistoj", "-P", help=tr_multi("Serĉi ludlistojn anstataŭ videojn.", "Search playlists instead of videos.", "Rechercher des playlists au lieu de vidéos.")),
+    kuketoj: Optional[str] = typer.Option(None, "--kuketoj", help=tr_multi("Vojo al cookies.txt por YouTube aŭtentigo.", "Path to cookies.txt for YouTube authentication.", "Chemin vers cookies.txt pour l'authentification YouTube.")),
     kuketoj_de_retumilo: Optional[str] = typer.Option(
         None, "--kuketoj-de-retumilo",
         help=(
@@ -227,22 +227,22 @@ def filmeto_serci(
 
 @filmeto.command("eljuti")
 def filmeto_eljuti(
-    url: Optional[str] = typer.Argument(None, help="YouTube URL to download. Not needed when using --csv-dosiero."),
-    output_dir: Optional[str] = typer.Option(None, "--output", "-o", help="Download directory (default: from config)."),
-    resolution: Optional[int] = typer.Option(None, "--difino", "-d", help="Max video resolution (e.g. 720, 1080)."),
-    audio_only: bool = typer.Option(False, "--audio", "-A", help="Extract audio only."),
-    video_only: bool = typer.Option(False, "--filmeto", "-F", help="Video stream only (no audio)."),
-    audio_bitrate: Optional[int] = typer.Option(None, "--sonkvalito", "-s", help="Max audio bitrate in kbps."),
+    url: Optional[str] = typer.Argument(None, help=tr_multi("YouTube URL por elŝuti. Ne necesa kun --csv-dosiero.", "YouTube URL to download. Not needed when using --csv-dosiero.", "URL YouTube à télécharger. Pas nécessaire avec --csv-dosiero.")),
+    output_dir: Optional[str] = typer.Option(None, "--output", "-o", help=tr_multi("Elŝuta dosierujo (defaŭlte: el agordo).", "Download directory (default: from config).", "Répertoire de téléchargement (par défaut: de la config).")),
+    resolution: Optional[int] = typer.Option(None, "--difino", "-d", help=tr_multi("Maksimuma video distingivo (ekz. 720, 1080).", "Max video resolution (e.g. 720, 1080).", "Résolution vidéo max (ex: 720, 1080).")),
+    audio_only: bool = typer.Option(False, "--audio", "-A", help=tr_multi("Eltiri nur audio.", "Extract audio only.", "Extraire uniquement l'audio.")),
+    video_only: bool = typer.Option(False, "--filmeto", "-F", help=tr_multi("Video streamo nur (sen audio).", "Video stream only (no audio).", "Flux vidéo uniquement (sans audio).")),
+    audio_bitrate: Optional[int] = typer.Option(None, "--sonkvalito", "-s", help=tr_multi("Maksimuma sonkvalito en kbps.", "Max audio bitrate in kbps.", "Débit audio max en kbps.")),
     subtitles: Optional[str] = typer.Option(
         None, "--subtitoloj", "--sub",
-        help="Subtitles: 'auto', 'all', or comma-separated language codes (e.g. 'eo,en,fr').",
+        help=tr_multi("Subtitoloj: 'auto', 'all', aŭ punktokomo-separitaj lingvokodoj (ekz. 'eo,en,fr').", "Subtitles: 'auto', 'all', or comma-separated language codes (e.g. 'eo,en,fr').", "Sous-titres: 'auto', 'all', ou codes de langue séparés par virgule (ex: 'eo,en,fr')."),
     ),
-    taksi: bool = typer.Option(False, "--taksi", "-t", help="Estimate size only, do not download."),
+    taksi: bool = typer.Option(False, "--taksi", "-t", help=tr_multi("Taksi grandecon nur, ne elŝuti.", "Estimate size only, do not download.", "Estimer la taille uniquement, ne pas télécharger.")),
     limo: Optional[int] = typer.Option(
         None, "--limo", "-lo",
-        help="Max items to download from a playlist.",
+        help=tr_multi("Maksimumaj eroj elŝutendaj el ludlisto.", "Max items to download from a playlist.", "Éléments max à télécharger d'une playlist."),
     ),
-    kuketoj: Optional[str] = typer.Option(None, "--kuketoj", help="Path to cookies.txt for YouTube authentication."),
+    kuketoj: Optional[str] = typer.Option(None, "--kuketoj", help=tr_multi("Vojo al cookies.txt por YouTube aŭtentigo.", "Path to cookies.txt for YouTube authentication.", "Chemin vers cookies.txt pour l'authentification YouTube.")),
     kuketoj_de_retumilo: Optional[str] = typer.Option(
         None, "--kuketoj-de-retumilo",
         help=(
@@ -254,7 +254,7 @@ def filmeto_eljuti(
     ),
     csv_dosiero: Optional[Path] = typer.Option(
         None, "--csv-dosiero", "--csv",
-        help="CSV file for batch download. Columns: celoj,difino,sonkvalito,audio,filmeto,vojo,subtitoloj,kuketoj,kuketoj_de_retumilo.",
+        help=tr_multi("CSV dosiero por amasa elŝuto. Kolumnoj: celoj,difino,sonkvalito,audio,filmeto,vojo,subtitoloj,kuketoj,kuketoj_de_retumilo.", "CSV file for batch download. Columns: celoj,difino,sonkvalito,audio,filmeto,vojo,subtitoloj,kuketoj,kuketoj_de_retumilo.", "Fichier CSV pour téléchargement par lots. Colonnes: celoj,difino,sonkvalito,audio,filmeto,vojo,subtitoloj,kuketoj,kuketoj_de_retumilo."),
         exists=True,
         dir_okay=False,
         readable=True,
