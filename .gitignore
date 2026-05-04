@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+
+# Virtual environments
+venv/
+.venv/
+
+# IDE / tools
+.vscode/
+.idea/
+*.swp
+
+# Serena (track memories, ignore config/cache)
+.serena/cache/
+.serena/project*.yml
+
+# OS
+.DS_Store
