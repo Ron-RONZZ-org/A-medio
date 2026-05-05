@@ -10,22 +10,12 @@ from A_medio.data.storage import get_db
 class TestDataDir:
     """Verify paths use ``A.core.paths.data_dir``, not hardcoded values."""
 
-    def test_data_dir_uses_core(self) -> None:
-        """_DATA_DIR should derive from A.core.paths.data_dir."""
+    def test_data_dir_derives_from_core(self) -> None:
+        """_DATA_DIR should be set from data_dir() at import time."""
         from A_medio.data import storage
 
-        expected = storage.data_dir()
-        assert storage._DATA_DIR == expected
-        assert "A" in str(storage._DATA_DIR)
-
-    def test_no_hardcoded_home(self) -> None:
-        """_DATA_DIR should NOT contain a literal hardcoded path fragment."""
-        from A_medio.data import storage
-
-        path_str = str(storage._DATA_DIR)
-        assert ".local/share/A" in path_str
-        # Make sure it's NOT a hardcoded string from this file — it should
-        # come from A.core.paths.data_dir()
+        # Both sides should match (data_dir is overridden by isolation fixture
+        # in test context, but the relationship still holds)
         assert storage._DATA_DIR == storage.data_dir()
 
 
