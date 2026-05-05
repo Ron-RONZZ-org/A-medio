@@ -166,6 +166,25 @@ Results are cached in SQLite for offline search via `--local` flag.
 | Download size estimation | ✅ [#8](https://github.com/Ron-RONZZ-org/A-medio/issues/8) | Done |
 | Search extras (`--aldona`, `--playlistoj`, `--limo`) | ✅ [#9](https://github.com/Ron-RONZZ-org/A-medio/issues/9) | Done |
 
+
+
+## Package Manager: `uv` is Required
+
+All A-ecosystem development **must** use `uv` as the package manager:
+
+| Operation | Command |
+|-----------|---------|
+| Install dependencies | `uv pip install <pkg>` |
+| Install project in dev mode | `uv pip install -e .` |
+| Run tests | `uv run pytest tests/` |
+| Install CLI tools (poetry, etc.) | `uv tool install <tool>` |
+| Add dev dependency | `uv add --dev <pkg>` |
+
+**Exceptions:**
+- `pip` in README install instructions is acceptable for end users who may not have `uv`
+- Readthedocs platform build may require `pip` (platform constraint)
+- Runtime `install-on-confirmation` code may fall back to `pip` if `uv` is unavailable (see A-core AGENTS.md)
+
 ## What to Avoid
 
 - Don't duplicate A-core utilities
