@@ -29,6 +29,9 @@ audio = "A_medio.cli:audio"
 [tool.hatch.build.targets.wheel]
 packages = ["src/A_medio"]
 
+[tool.uv.sources]
+a-core = { path = "../A-core", editable = true }
+
 [tool.poetry]
 name = "A-medio"
 version = "0.1.0"
