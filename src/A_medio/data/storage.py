@@ -8,12 +8,17 @@ from A.core.paths import data_dir
 from A.data.base import SQLiteDB, backup_db, health_check
 
 
+_DATA_DIR = data_dir() / "medio"
+
+
 def ensure_dirs() -> None:
     _DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 
-def get_db(path: Path = _DATA_DIR / "medio.db") -> SQLiteDB:
+def get_db(path: Path | None = None) -> SQLiteDB:
     """Get database connection with health check and backup."""
+    if path is None:
+        path = _DATA_DIR / "medio.db"
     ensure_dirs()
     if not health_check(path):
         from A.data.base import repair_db as _repair
