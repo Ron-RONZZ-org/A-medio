@@ -49,7 +49,15 @@ src/A_medio/
 ├── services/
 │   ├── __init__.py  # Service exports
 │   ├── base.py      # Base MediaService interface
-│   └── youtube.py   # YouTube-specific service (yt-dlp wrapper)
+│   └── youtube/     # YouTube-specific service (yt-dlp wrapper)
+│       ├── __init__.py         # Package re-exports
+│       ├── service.py          # YouTubeService (~283 lines)
+│       ├── _wrapper.py         # YtDlpWrapper lazy import singleton
+│       ├── _models.py          # YouTubeVideo, BatchResult, EstimateResult
+│       ├── _format_helpers.py  # build_format_selector, build_subtitle_opts
+│       ├── _cookie_helpers.py  # Cookie/browser auth helpers
+│       ├── _strategy.py        # Search strategy persistence
+│       └── _csv_helpers.py     # CSV batch download parsing
 └── data/
     └── storage.py   # SQLite (uses A.data.base)
 ```
