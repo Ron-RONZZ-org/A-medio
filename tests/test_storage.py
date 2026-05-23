@@ -40,3 +40,19 @@ class TestGetDb:
             "SELECT name FROM sqlite_master WHERE type='table' AND name='youtube_videos_fts'"
         )
         assert len(rows) == 1
+
+    def test_youtube_videos_has_uuid_column(self) -> None:
+        """youtube_videos table has uuid column for future UUID support."""
+        db = get_db(Path("/tmp/test_medio_uuid.db"))
+        cols = db.execute("PRAGMA table_info(youtube_videos)")
+        col_names = {c["name"] for c in cols}
+        assert "uuid" in col_names
+
+    def test_youtube_videos_uuid_migration_idempotent(self) -> None:
+        """Calling get_db twice does not break on the uuid column."""
+        db1 = get_db(Path("/tmp/test_medio_migrate.db"))
+        db2 = get_db(Path("/tmp/test_medio_migrate.db"))
+        # Both should return functional db without errors
+        cols = db2.execute("PRAGMA table_info(youtube_videos)")
+        col_names = {c["name"] for c in cols}
+        assert "uuid" in col_names
