@@ -247,7 +247,7 @@ class TestYouTubeService:
     def test_get_download_dir(self) -> None:
         """get_download_dir returns a string."""
         service = YouTubeService()
-        with patch("A_medio.services.youtube.get_download_dir", return_value="/tmp/medio"):
+        with patch("A_medio.services.youtube.service.get_download_dir", return_value="/tmp/medio"):
             result = service.get_download_dir()
             assert result == "/tmp/medio"
 
@@ -264,7 +264,7 @@ class TestYouTubeService:
         dl_dir = str(tmp_path / "downloads")
         with (
             patch.object(service, "is_available", return_value=True),
-            patch("A_medio.services.youtube.get_download_dir", return_value=dl_dir),
+            patch("A_medio.services.youtube.service.get_download_dir", return_value=dl_dir),
             patch.object(service._wrapper, "create_ydl") as mock_create,
         ):
             mock_ydl = MagicMock()
@@ -281,7 +281,7 @@ class TestYouTubeService:
         dl_dir = str(tmp_path / "custom")
         with (
             patch.object(service, "is_available", return_value=True),
-            patch("A_medio.services.youtube.get_download_dir", return_value=str(tmp_path)),
+            patch("A_medio.services.youtube.service.get_download_dir", return_value=str(tmp_path)),
             patch.object(service._wrapper, "create_ydl") as mock_create,
         ):
             mock_ydl = MagicMock()
@@ -898,7 +898,7 @@ class TestSearchWithCookies:
             patch.object(service.__class__, "get_service", return_value=mock_crud),
             patch.object(service, "is_available", return_value=True),
             patch.object(service._wrapper, "create_ydl") as mock_create,
-            patch("A_medio.services.youtube._save_search_strategy"),
+            patch("A_medio.services.youtube.service._save_search_strategy"),
         ):
             mock_ydl = MagicMock()
             mock_ydl.extract_info.return_value = {
@@ -920,7 +920,7 @@ class TestSearchWithCookies:
             patch.object(service.__class__, "get_service", return_value=mock_crud),
             patch.object(service, "is_available", return_value=True),
             patch.object(service._wrapper, "create_ydl") as mock_create,
-            patch("A_medio.services.youtube._save_search_strategy"),
+            patch("A_medio.services.youtube.service._save_search_strategy"),
         ):
             mock_ydl = MagicMock()
             mock_ydl.extract_info.return_value = {
@@ -951,8 +951,8 @@ class TestSearchWithCookies:
             patch.object(service.__class__, "get_service", return_value=mock_crud),
             patch.object(service, "is_available", return_value=True),
             patch.object(service._wrapper, "create_ydl") as mock_create,
-            patch("A_medio.services.youtube._save_search_strategy"),
-            patch("A_medio.services.youtube._get_download_error",
+            patch("A_medio.services.youtube.service._save_search_strategy"),
+            patch("A_medio.services.youtube.service.get_download_error",
                   return_value=FakeError),
         ):
             mock_ydl = MagicMock()
@@ -975,7 +975,7 @@ class TestSearchWithCookies:
             patch.object(service.__class__, "get_service", return_value=mock_crud),
             patch.object(service, "is_available", return_value=True),
             patch.object(service._wrapper, "create_ydl") as mock_create,
-            patch("A_medio.services.youtube._save_search_strategy") as mock_save,
+            patch("A_medio.services.youtube.service._save_search_strategy") as mock_save,
         ):
             mock_ydl = MagicMock()
             mock_ydl.extract_info.return_value = {
@@ -1002,7 +1002,7 @@ class TestDownloadWithCookies:
         dl_dir = str(tmp_path / "dl_cookies")
         with (
             patch.object(service, "is_available", return_value=True),
-            patch("A_medio.services.youtube.get_download_dir", return_value=dl_dir),
+            patch("A_medio.services.youtube.service.get_download_dir", return_value=dl_dir),
             patch.object(service._wrapper, "create_ydl") as mock_create,
         ):
             mock_ydl = MagicMock()
@@ -1022,7 +1022,7 @@ class TestDownloadWithCookies:
         dl_dir = str(tmp_path / "dl_browser")
         with (
             patch.object(service, "is_available", return_value=True),
-            patch("A_medio.services.youtube.get_download_dir", return_value=dl_dir),
+            patch("A_medio.services.youtube.service.get_download_dir", return_value=dl_dir),
             patch.object(service._wrapper, "create_ydl") as mock_create,
         ):
             mock_ydl = MagicMock()

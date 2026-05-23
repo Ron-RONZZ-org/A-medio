@@ -231,31 +231,232 @@ class YouTubeService(MediaService):
 
         return results
 
+    def get_by_id(self, video_id: str) -> dict[str, Any] | None:
+        """Get a video by ID from local cache.
 
-# ── Service singleton ──────────────────────────────────────────────────────
+        Args:
+            video_id: The YouTube video ID.
 
-_service_instance: YouTubeService | None = None
+        Returns:
+            Video dict or ``None``.
+        """
+        service = self.get_service()
+        return service.get_by_field("video_id", video_id)
 
+    def search_local(
+        self,
+        query: str,
+        **opts: Any,
+    ) -> list[dict[str, Any]]:
+        """Search local cache only (using FTS5).
 
-def get_youtube_service() -> YouTubeService:
-    """Get the YouTube service singleton.
+        Args:
+            query: Search query string.
+            **opts: Additional options passed to FTS search.
 
-    Returns:
-        The shared ``YouTubeService`` instance.
-    """
-    global _service_instance
-    if _service_instance is None:
-        _service_instance = YouTubeService()
-    return _service_instance
+        Returns:
+            List of video dicts from local cache.
+        """
+        service = self.get_service()
+        return service.search_fts(query, **opts)
 
+    # ── download ─────────────────────────────────────────────────────────
 
-# ── batch download ───────────────────────────────────────────────────
+    def download(
+        self,
+        url: str,
+        **opts: Any,
+    ) -> list[Path]:
+        """Download a YouTube video/audio.
+
+        Args:
+            url: YouTube URL to download.
+            **opts: Download options:
+                - output_dir: Output directory (default: from config).
+                - resolution: Max video height (e.g. 720, 1080).
+                - audio_only: Extract audio only.
+                - video_only: Video stream only (no audio).
+                - audio_bitrate: Max audio bitrate in kbps.
+                - subtitles: Subtitle spec (auto, all, or langs).
+                - cookies: Path to cookies.txt file.
+                - cookies_from_browser: Browser name or ``"browser:profile"``.
+                - playlist_end: Max number of items from a playlist.
+
+        Returns:
+            List of paths to downloaded files (empty if failed).
+        """
+        if not self.is_available():
+            error(tr_multi(
+                "yt-dlp ne estas instalita. Instalu ghin por elsxuti.",
+                "yt-dlp is not installed. Install it to download.",
+                "yt-dlp n'est pas installe. Installez-le pour telecharger.",
+            ))
+            return []
+
+        output_dir = Path(opts.get("output_dir", self.get_download_dir()))
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        format_sel = build_format_selector(
+            resolution=opts.get("resolution"),
+            audio_only=opts.get("audio_only", False),
+            video_only=opts.get("video_only", False),
+            audio_bitrate=opts.get("audio_bitrate"),
+        )
+
+        ydl_opts: dict[str, Any] = {
+            "quiet": True,
+            "no_warnings": True,
+            "format": format_sel,
+            "outtmpl": str(output_dir / "%(title).80s [%(id)s].%(ext)s"),
+            "ignoreerrors": True,
+        }
+        if opts.get("playlist_end") is not None:
+            ydl_opts["playlistend"] = int(opts["playlist_end"])
+        ydl_opts.update(build_subtitle_opts(opts.get("subtitles")))
+        ydl_opts.update(build_cookie_opts(
+            cookies=opts.get("cookies"),
+            cookies_from_browser=opts.get("cookies_from_browser"),
+        ))
+
+        before = {p for p in output_dir.iterdir()} if output_dir.exists() else set()
+
+        try:
+            with self._wrapper.create_ydl(ydl_opts) as ydl:
+                ydl.extract_info(url, download=True)
+        except get_download_error() as exc:
+            error(tr_multi(
+                f"Elsxuto fiaskis: {exc}",
+                f"Download failed: {exc}",
+                f"Telechargement echoue: {exc}",
+            ))
+            return []
+
+        after = {p for p in output_dir.iterdir()}
+        created = sorted(after - before, key=lambda p: p.name)
+
+        if created:
+            info(tr_multi(
+                f"Elsxutis {len(created)} dosiero(j)n al {output_dir}",
+                f"Downloaded {len(created)} file(s) to {output_dir}",
+                f"Telecharge {len(created)} fichier(s) vers {output_dir}",
+            ))
+        else:
+            info(tr_multi(
+                "Neniu dosiero elsxutita.",
+                "No files downloaded.",
+                "Aucun fichier telecharge.",
+            ))
+
+        return created
+
+    # ── estimate ─────────────────────────────────────────────────────────
+
+    def estimate(
+        self,
+        url: str,
+        **opts: Any,
+    ) -> EstimateResult | None:
+        """Estimate download size without downloading.
+
+        Runs a dry-run ``extract_info`` with the same format options as
+        :meth:`download` and sums up file sizes.
+
+        Args:
+            url: YouTube URL to estimate.
+            **opts: Same options as :meth:`download` (format, cookies, etc.).
+
+        Returns:
+            :class:`EstimateResult`, or ``None`` if estimation fails.
+        """
+        if not self.is_available():
+            error(tr_multi(
+                "yt-dlp ne estas instalita.",
+                "yt-dlp is not installed.",
+                "yt-dlp n'est pas installe.",
+            ))
+            return None
+
+        format_sel = build_format_selector(
+            resolution=opts.get("resolution"),
+            audio_only=opts.get("audio_only", False),
+            video_only=opts.get("video_only", False),
+            audio_bitrate=opts.get("audio_bitrate"),
+        )
+
+        ydl_opts: dict[str, Any] = {
+            "quiet": True,
+            "no_warnings": True,
+            "format": format_sel,
+            "skip_download": True,
+            "ignoreerrors": True,
+        }
+        if opts.get("playlist_end") is not None:
+            ydl_opts["playlistend"] = int(opts["playlist_end"])
+        ydl_opts.update(build_cookie_opts(
+            cookies=opts.get("cookies"),
+            cookies_from_browser=opts.get("cookies_from_browser"),
+        ))
+
+        try:
+            with self._wrapper.create_ydl(ydl_opts) as ydl:
+                info_data = ydl.extract_info(url, download=False)
+        except get_download_error() as exc:
+            error(tr_multi(
+                f"Takso fiaskis: {exc}",
+                f"Estimation failed: {exc}",
+                f"Estimation echouee: {exc}",
+            ))
+            return None
+
+        items_list: list[dict[str, Any]] = []
+        entries = info_data.get("entries") if isinstance(info_data, dict) else None
+        if entries:
+            for entry in entries:
+                if isinstance(entry, dict):
+                    items_list.append(entry)
+        elif isinstance(info_data, dict):
+            items_list.append(info_data)
+
+        total = 0
+        item_details: list[dict[str, Any]] = []
+        for item in items_list:
+            filesize = (
+                item.get("filesize")
+                or item.get("filesize_approx")
+                or 0
+            )
+            if isinstance(filesize, (int, float)):
+                total += int(filesize)
+            item_details.append({
+                "title": item.get("title", ""),
+                "duration": item.get("duration", 0),
+                "filesize": int(filesize) if filesize else 0,
+                "url": item.get("webpage_url") or item.get("url", ""),
+            })
+
+        return EstimateResult(
+            count=len(item_details),
+            total_bytes=total,
+            items=item_details,
+        )
+
+    # ── batch download ───────────────────────────────────────────────────
 
     def batch_download(
         self,
         specs: list[dict[str, Any]],
     ) -> list[BatchResult]:
-        """Download multiple items from a list of download specs."""
+        """Download multiple items from a list of download specs.
+
+        Each spec should contain at least ``"targets"`` (list of URLs).
+        Other keys are forwarded to :meth:`download` as ``**opts``.
+
+        Args:
+            specs: List of download-spec dicts (e.g. from :func:`parse_csv_rows`).
+
+        Returns:
+            List of :class:`BatchResult` — one per URL across all specs.
+        """
         results: list[BatchResult] = []
         row = 0
         for spec in specs:
@@ -281,3 +482,20 @@ def get_youtube_service() -> YouTubeService:
                     ))
 
         return results
+
+
+# ── Service singleton ──────────────────────────────────────────────────────
+
+_service_instance: YouTubeService | None = None
+
+
+def get_youtube_service() -> YouTubeService:
+    """Get the YouTube service singleton.
+
+    Returns:
+        The shared ``YouTubeService`` instance.
+    """
+    global _service_instance
+    if _service_instance is None:
+        _service_instance = YouTubeService()
+    return _service_instance
