@@ -62,6 +62,13 @@ src/A_medio/
     └── storage.py   # SQLite (uses A.data.base)
 ```
 
+### UUID Exception: `youtube_videos`
+
+The `youtube_videos` table uses `INTEGER PRIMARY KEY AUTOINCREMENT` (not `uuid TEXT PRIMARY KEY`)
+because it is a **transient search-result cache** imported from yt-dlp, not a user-facing editable
+entity. There are no cross-references to this table from other modules. Per workspace UUID PK rule,
+exceptions must be documented. A nullable `uuid TEXT` column exists for future migration.
+
 ### Service Pattern
 
 Each media type has its own service file:
