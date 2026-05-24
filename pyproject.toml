@@ -27,6 +27,9 @@ filmeto = "A_medio.cli:filmeto"
 foto = "A_medio.cli:foto"
 audio = "A_medio.cli:audio"
 
+[project.entry-points."A.backup"]
+medio = "A_medio.data.storage:get_backup_targets"
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/A_medio"]
 

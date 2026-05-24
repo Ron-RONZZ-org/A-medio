@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from A.core.paths import data_dir
+from A.core.backup_targets import BackupTarget
 from A.data.base import SQLiteDB, backup_db, health_check
 
 
@@ -165,4 +166,16 @@ def _migrate_youtube_videos_uuid(db: SQLiteDB) -> None:
         pass  # Table might not exist yet
 
 
-__all__ = ["ensure_dirs", "get_db"]
+def get_backup_targets() -> list[BackupTarget]:
+    """Return backup targets for A-medio."""
+    return [
+        BackupTarget(
+            path=_DATA_DIR / "medio.db",
+            category="data",
+            module="medio",
+            label="Medio database",
+        ),
+    ]
+
+
+__all__ = ["ensure_dirs", "get_db", "get_backup_targets"]
