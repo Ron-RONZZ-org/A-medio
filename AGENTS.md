@@ -115,11 +115,35 @@ Two sources supported, passed as yt-dlp options:
 1. Cached successful strategy (from previous search)
 2. Explicit ``--kuketoj`` file
 3. Auto-discovered browser profiles (Firefox forks: floorp, librewolf, waterfox, zen)
-4. No cookies (bare fallback)
+4. Config-saved browser preference (from auto-setup prompt)
+5. No cookies (bare fallback)
 
 Certificate errors and empty results trigger automatic fallback retries.
 
+**Auto cookie setup on first call:**
+On the first ``serci`` call without ``--kuketoj`` or ``--kuketoj-de-retumilo`` flags:
+1. ``_auto_setup_cookies()`` in ``cli.py`` calls ``_detect_available_browsers()`` to probe all Firefox-style browser roots
+2. If a browser with ``cookies.sqlite`` is found, prompts the user: *"Detected Floorp cookies from ~/.floorp/xxx.default. Use for YouTube?"*
+3. On confirmation, saves the browser (and optional profile path) to persistent config
+4. Future calls auto-load from config — no prompt
+5. Uses ``A.utils.interactive.confirm_action`` for the prompt
+6. Non-interactive terminals (piped, scripted) skip auto-setup silently
+7. Explicit ``--kuketoj`` or ``--kuketoj-de-retumilo`` flags always take precedence over config
+
+**Config keys:**
+- ``cookies_from_browser`` (str|None) — browser name saved from auto-setup
+- ``cookies_from_browser_profile`` (str|None) — specific profile path (when null, yt-dlp auto-selects)
+
 **CLI:** ``kuketoj-helpo`` command shows detailed setup instructions.
+
+### Download Confirmation
+
+Before downloading via ``eljuti`` (non-CSV, non-``--taksi`` mode):
+1. ``_download_with_confirmation()`` in ``cli.py`` calls ``youtube.estimate()`` to dry-run and get file sizes
+2. Shows a Rich table with Title, Duration, and Size columns
+3. Prompts: *"Continue with download?"* with default Yes
+4. On confirmation, proceeds with the actual download
+5. Non-interactive terminals skip the prompt and download directly
 
 ### Download Estimation
 
@@ -176,7 +200,8 @@ Results are cached in SQLite for offline search via `--local` flag.
 
 | Feature | Issue | Priority |
 |---------|-------|----------|
-| Cookie/browser auth | ✅ [#6](https://github.com/Ron-RONZZ-org/A-medio/issues/6) | Done |
+| Cookie/browser auth + auto-setup | ✅ [#6](https://github.com/Ron-RONZZ-org/A-medio/issues/6) | Done |
+| Download confirmation prompt | ✅ (this PR) | Done |
 | `ludi` (play video) | ❌ [#7](https://github.com/Ron-RONZZ-org/A-medio/issues/7) | Won't do — users can ``eljuti --output /tmp && xdg-open`` |
 | Download size estimation | ✅ [#8](https://github.com/Ron-RONZZ-org/A-medio/issues/8) | Done |
 | Search extras (`--aldona`, `--playlistoj`, `--limo`) | ✅ [#9](https://github.com/Ron-RONZZ-org/A-medio/issues/9) | Done |

@@ -1471,3 +1471,449 @@ class TestCLIDownloadExtras:
             assert "Taksita" in result.stdout or "Estimated" in result.stdout
             assert "3" in result.stdout
             assert not mock_service.download.called  # Should not download
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Config: cookies_from_browser accessors
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestConfigCookieAccessors:
+    """Tests for cookie config accessors in ``config.py``."""
+
+    def test_default_cookies_from_browser_is_none(self) -> None:
+        """Default value is ``None`` when not set."""
+        from A_medio.config import get_cookies_from_browser
+        assert get_cookies_from_browser() is None
+
+    def test_set_and_get_cookies_from_browser(self) -> None:
+        """Round-trip set and get works."""
+        from A_medio.config import get_cookies_from_browser, set_cookies_from_browser
+        set_cookies_from_browser("floorp")
+        assert get_cookies_from_browser() == "floorp"
+
+    def test_set_cookies_from_browser_with_profile(self) -> None:
+        """Profile is stored alongside browser name."""
+        from A_medio.config import (
+            get_cookies_from_browser,
+            get_cookies_from_browser_profile,
+            set_cookies_from_browser,
+        )
+        set_cookies_from_browser("floorp", "/home/user/.floorp/abc.default")
+        assert get_cookies_from_browser() == "floorp"
+        assert get_cookies_from_browser_profile() == "/home/user/.floorp/abc.default"
+
+    def test_clear_cookies_from_browser(self) -> None:
+        """Setting to ``None`` clears both values."""
+        from A_medio.config import (
+            get_cookies_from_browser,
+            get_cookies_from_browser_profile,
+            set_cookies_from_browser,
+        )
+        set_cookies_from_browser("floorp", "/profile")
+        set_cookies_from_browser(None)
+        assert get_cookies_from_browser() is None
+        assert get_cookies_from_browser_profile() is None
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# _detect_available_browsers
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestDetectAvailableBrowsers:
+    """Tests for ``_detect_available_browsers()``."""
+
+    def test_no_browsers_found(self, tmp_path: Path) -> None:
+        """Returns empty dict when no cookie.sqlite files exist."""
+        from A_medio.services.youtube._cookie_helpers import _detect_available_browsers
+
+        with patch("A_medio.services.youtube._cookie_helpers.Path.home", return_value=tmp_path):
+            result = _detect_available_browsers()
+        assert result == {}
+
+    def test_detects_floorp(self, tmp_path: Path) -> None:
+        """Detects Floorp with a valid profile + cookies.sqlite."""
+        from A_medio.services.youtube._cookie_helpers import _detect_available_browsers
+
+        # Create mock floorp profile with cookies
+        profile_dir = tmp_path / ".floorp" / "abc.default"
+        profile_dir.mkdir(parents=True)
+        (profile_dir / "cookies.sqlite").write_text("")
+        # Create profiles.ini
+        ini_content = (
+            "[Profile0]\n"
+            "Name=default\n"
+            "IsRelative=1\n"
+            f"Path=abc.default\n"
+        )
+        (tmp_path / ".floorp" / "profiles.ini").write_text(ini_content)
+
+        with patch("A_medio.services.youtube._cookie_helpers.Path.home", return_value=tmp_path):
+            result = _detect_available_browsers()
+        assert "floorp" in result
+        assert any("abc.default" in p for p in result["floorp"])
+
+    def test_skips_browsers_without_cookies(self, tmp_path: Path) -> None:
+        """Browsers without cookies.sqlite are not included."""
+        from A_medio.services.youtube._cookie_helpers import _detect_available_browsers
+
+        profile_dir = tmp_path / ".floorp" / "abc.default"
+        profile_dir.mkdir(parents=True)
+        # No cookies.sqlite file
+        ini_content = (
+            "[Profile0]\n"
+            "Name=default\n"
+            "IsRelative=1\n"
+            f"Path=abc.default\n"
+        )
+        (tmp_path / ".floorp" / "profiles.ini").write_text(ini_content)
+
+        with patch("A_medio.services.youtube._cookie_helpers.Path.home", return_value=tmp_path):
+            result = _detect_available_browsers()
+        assert "floorp" not in result
+
+    def test_detects_firefox_when_no_fork(self, tmp_path: Path) -> None:
+        """Detects plain Firefox when forks are absent."""
+        from A_medio.services.youtube._cookie_helpers import _detect_available_browsers
+
+        profile_dir = tmp_path / ".mozilla" / "firefox" / "xyz.default"
+        profile_dir.mkdir(parents=True)
+        (profile_dir / "cookies.sqlite").write_text("")
+        ini_content = (
+            "[Profile0]\n"
+            "Name=default\n"
+            "IsRelative=1\n"
+            f"Path=xyz.default\n"
+        )
+        (tmp_path / ".mozilla" / "firefox" / "profiles.ini").write_text(ini_content)
+
+        with patch("A_medio.services.youtube._cookie_helpers.Path.home", return_value=tmp_path):
+            result = _detect_available_browsers()
+        assert "firefox" in result
+        assert any("xyz.default" in p for p in result["firefox"])
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# _cookie_browser_candidates with config params
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestCookieBrowserCandidatesWithConfig:
+    """Tests for ``_cookie_browser_candidates`` with config fallback."""
+
+    def test_raw_none_no_config_returns_none(self) -> None:
+        """When both raw and config are None, returns [None]."""
+        from A_medio.services.youtube._cookie_helpers import _cookie_browser_candidates
+        result = _cookie_browser_candidates(None)
+        assert result == [None]
+
+    def test_config_browser_sets_candidates(self) -> None:
+        """When raw is None but config_browser is set, returns candidates."""
+        from A_medio.services.youtube._cookie_helpers import _cookie_browser_candidates
+        result = _cookie_browser_candidates(None, config_browser="firefox")
+        # At minimum: the base spec + None fallback
+        assert len(result) >= 1
+        assert result[0] == ("firefox",)
+
+    def test_config_browser_with_profile(self) -> None:
+        """Config profile is passed through in the candidate tuple."""
+        from A_medio.services.youtube._cookie_helpers import _cookie_browser_candidates
+        result = _cookie_browser_candidates(
+            None,
+            config_browser="firefox",
+            config_profile="/path/to/profile",
+        )
+        assert result[0] == ("firefox", "/path/to/profile", None, None)
+
+    def test_explicit_flag_overrides_config(self) -> None:
+        """When raw is provided, config params are ignored."""
+        from A_medio.services.youtube._cookie_helpers import _cookie_browser_candidates
+        result = _cookie_browser_candidates(
+            "brave",
+            config_browser="firefox",
+            config_profile="/ignored",
+        )
+        # Should use "brave" not "firefox"
+        assert result[0] == ("chrome",)
+
+    def test_config_firefox_discovers_profiles(self, tmp_path: Path) -> None:
+        """Config-based firefox discovers real profiles when no specific profile set."""
+        from A_medio.services.youtube._cookie_helpers import _cookie_browser_candidates
+
+        profile_dir = tmp_path / ".mozilla" / "firefox" / "xyz.default"
+        profile_dir.mkdir(parents=True)
+        (profile_dir / "cookies.sqlite").write_text("")
+        ini = tmp_path / ".mozilla" / "firefox" / "profiles.ini"
+        ini.write_text(
+            "[Profile0]\nName=default\nIsRelative=1\nPath=xyz.default\n"
+        )
+
+        with patch("A_medio.services.youtube._cookie_helpers.Path.home", return_value=tmp_path):
+            result = _cookie_browser_candidates(None, config_browser="firefox")
+        # Should include auto-discovered profile
+        assert any("xyz.default" in str(s) for s in result if s is not None)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# _auto_setup_cookies in cli.py
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestAutoSetupCookies:
+    """Tests for ``_auto_setup_cookies()`` in ``cli.py``."""
+
+    def test_no_browsers_returns_none(self) -> None:
+        """When no browsers detected, returns (None, None)."""
+        from A_medio.cli import _auto_setup_cookies
+
+        with (
+            patch("A_medio.cli._detect_available_browsers", return_value={}),
+            patch("A_medio.cli.sys.stdin.isatty", return_value=True),
+        ):
+            result = _auto_setup_cookies()
+        assert result == (None, None)
+
+    def test_non_interactive_returns_none(self) -> None:
+        """When not a tty, returns (None, None) without prompting."""
+        from A_medio.cli import _auto_setup_cookies
+
+        with (
+            patch("A_medio.cli._detect_available_browsers", return_value={"floorp": ["/prof"]}),
+            patch("A_medio.cli.sys.stdin.isatty", return_value=False),
+        ):
+            result = _auto_setup_cookies()
+        assert result == (None, None)
+
+    def test_user_confirms_saves_config(self) -> None:
+        """When user confirms, config is saved and browser/profile returned."""
+        from A_medio.cli import _auto_setup_cookies
+
+        with (
+            patch("A_medio.cli._detect_available_browsers", return_value={"floorp": ["/prof"]}),
+            patch("A_medio.cli.sys.stdin.isatty", return_value=True),
+            patch("A.utils.interactive.confirm_action", return_value=True),
+            patch("A_medio.cli.set_cookies_from_browser") as mock_set,
+        ):
+            result = _auto_setup_cookies()
+        assert result == ("floorp", "/prof")
+        mock_set.assert_called_once_with("floorp", "/prof")
+
+    def test_user_declines_does_not_save(self) -> None:
+        """When user declines, config is not saved and returns (None, None)."""
+        from A_medio.cli import _auto_setup_cookies
+
+        with (
+            patch("A_medio.cli._detect_available_browsers", return_value={"floorp": ["/prof"]}),
+            patch("A_medio.cli.sys.stdin.isatty", return_value=True),
+            patch("A.utils.interactive.confirm_action", return_value=False),
+            patch("A_medio.cli.set_cookies_from_browser") as mock_set,
+        ):
+            result = _auto_setup_cookies()
+        assert result == (None, None)
+        mock_set.assert_not_called()
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# _download_with_confirmation in cli.py
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestDownloadWithConfirmation:
+    """Tests for ``_download_with_confirmation()`` in ``cli.py``."""
+
+    def test_cancels_when_estimate_fails(self) -> None:
+        """Returns [] without prompting when estimate returns None."""
+        from A_medio.cli import _download_with_confirmation
+
+        mock_youtube = MagicMock()
+        mock_youtube.estimate.return_value = None
+
+        with patch("A_medio.cli.sys.stdin.isatty", return_value=True):
+            result = _download_with_confirmation(
+                "https://youtu.be/abc", mock_youtube, {}
+            )
+        assert result == []
+        assert not mock_youtube.download.called
+
+    def test_user_cancels_download(self) -> None:
+        """When user types N, download is skipped."""
+        from A_medio.cli import _download_with_confirmation
+        from A_medio.services.youtube import EstimateResult
+
+        mock_youtube = MagicMock()
+        mock_youtube.estimate.return_value = EstimateResult(
+            count=1, total_bytes=10_000_000,
+            items=[{"title": "V1", "duration": 120, "filesize": 10_000_000}],
+        )
+
+        with (
+            patch("A_medio.cli.sys.stdin.isatty", return_value=True),
+            patch("A.utils.interactive.confirm_action", return_value=False),
+        ):
+            result = _download_with_confirmation(
+                "https://youtu.be/abc", mock_youtube, {}
+            )
+        assert result == []
+        assert not mock_youtube.download.called
+
+    def test_user_confirms_download(self) -> None:
+        """When user types Y, download proceeds."""
+        from A_medio.cli import _download_with_confirmation
+        from A_medio.services.youtube import EstimateResult
+
+        mock_youtube = MagicMock()
+        mock_youtube.estimate.return_value = EstimateResult(
+            count=1, total_bytes=10_000_000,
+            items=[{"title": "V1", "duration": 120, "filesize": 10_000_000}],
+        )
+        mock_youtube.download.return_value = [Path("/tmp/v1.mp4")]
+
+        with (
+            patch("A_medio.cli.sys.stdin.isatty", return_value=True),
+            patch("A.utils.interactive.confirm_action", return_value=True),
+        ):
+            result = _download_with_confirmation(
+                "https://youtu.be/abc", mock_youtube, {"resolution": 720}
+            )
+        assert len(result) == 1
+        mock_youtube.download.assert_called_once_with(
+            "https://youtu.be/abc", resolution=720
+        )
+
+    def test_non_interactive_skips_confirm(self) -> None:
+        """When not a tty, downloads without prompting."""
+        from A_medio.cli import _download_with_confirmation
+
+        mock_youtube = MagicMock()
+        mock_youtube.download.return_value = [Path("/tmp/v1.mp4")]
+        mock_youtube.estimate.return_value = None  # Not called in non-interactive
+
+        with patch("A_medio.cli.sys.stdin.isatty", return_value=False):
+            result = _download_with_confirmation(
+                "https://youtu.be/abc", mock_youtube, {}
+            )
+        assert len(result) == 1
+        mock_youtube.download.assert_called_once_with(
+            "https://youtu.be/abc"
+        )
+        assert not mock_youtube.estimate.called  # No estimate in non-interactive
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# CLI integration: cookie auto-setup
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestCLICookieAutoSetup:
+    """Integration tests for auto-setup flow in serci command."""
+
+    def test_serci_skips_auto_when_cached_strategy(self) -> None:
+        """When cached strategy exists, auto-setup is NOT called."""
+        from typer.testing import CliRunner
+
+        from A_medio.cli import app
+
+        runner = CliRunner()
+
+        with (
+            patch("A_medio.cli.get_youtube_service") as mock_get,
+            patch("A_medio.cli._load_search_strategy", return_value={"opts": {"cookiesfrombrowser": ("firefox",)}}),
+            patch("A_medio.cli._auto_setup_cookies") as mock_auto,
+        ):
+            mock_service = MagicMock()
+            mock_service.is_available.return_value = True
+            mock_service.search.return_value = [
+                {"title": "V1", "author": "A1", "url": "https://youtu.be/abc"}
+            ]
+            mock_get.return_value = mock_service
+
+            runner.invoke(app, ["filmeto", "serci", "python"])
+
+        mock_auto.assert_not_called()
+
+    def test_serci_skips_auto_with_explicit_flags(self) -> None:
+        """When --kuketoj provided, auto-setup is skipped."""
+        from typer.testing import CliRunner
+
+        from A_medio.cli import app
+
+        runner = CliRunner()
+
+        with (
+            patch("A_medio.cli.get_youtube_service") as mock_get,
+            patch("A_medio.cli._load_search_strategy") as mock_load,
+            patch("A_medio.cli._auto_setup_cookies") as mock_auto,
+        ):
+            mock_service = MagicMock()
+            mock_service.is_available.return_value = True
+            mock_service.search.return_value = [
+                {"title": "V1", "author": "A1", "url": "https://youtu.be/abc"}
+            ]
+            mock_get.return_value = mock_service
+
+            runner.invoke(app, [
+                "filmeto", "serci", "python",
+                "--kuketoj", "/tmp/cookies.txt",
+            ])
+
+        mock_auto.assert_not_called()
+        # _load_search_strategy should NOT be called when explicit flags present
+        # (it's skipped because kuketoj is truthy)
+        mock_load.assert_not_called()
+
+    def test_serci_triggers_auto_on_first_call(self) -> None:
+        """When no strategy cached and no flags, auto-setup triggers."""
+        from typer.testing import CliRunner
+
+        from A_medio.cli import app
+
+        runner = CliRunner()
+
+        with (
+            patch("A_medio.cli.get_youtube_service") as mock_get,
+            patch("A_medio.cli._load_search_strategy", return_value={}),
+            patch("A_medio.cli._auto_setup_cookies", return_value=("floorp", "/prof")),
+        ):
+            mock_service = MagicMock()
+            mock_service.is_available.return_value = True
+            mock_service.search.return_value = [
+                {"title": "V1", "author": "A1", "url": "https://youtu.be/abc"}
+            ]
+            mock_get.return_value = mock_service
+
+            runner.invoke(app, [
+                "filmeto", "serci", "python",
+            ])
+
+            # Verify search was called with cookies_from_browser set
+            mock_service.search.assert_called_once()
+            _call_kwargs = mock_service.search.call_args[1]
+            assert "cookies_from_browser" in _call_kwargs
+
+    def test_serci_auto_decline_no_cookies(self) -> None:
+        """When user declines auto-setup, search is called without cookies."""
+        from typer.testing import CliRunner
+
+        from A_medio.cli import app
+
+        runner = CliRunner()
+
+        with (
+            patch("A_medio.cli.get_youtube_service") as mock_get,
+            patch("A_medio.cli._load_search_strategy", return_value={}),
+            patch("A_medio.cli._auto_setup_cookies", return_value=(None, None)),
+        ):
+            mock_service = MagicMock()
+            mock_service.is_available.return_value = True
+            mock_service.search.return_value = []
+            mock_get.return_value = mock_service
+
+            runner.invoke(app, [
+                "filmeto", "serci", "python",
+            ])
+
+            # Search called without cookies_from_browser
+            mock_service.search.assert_called_once()
+            _call_kwargs = mock_service.search.call_args[1]
+            assert "cookies_from_browser" not in _call_kwargs

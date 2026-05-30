@@ -13,7 +13,11 @@ from A.core.service import CRUDService
 from A.data.search import FTSConfig
 from A.utils.normalize import fold_search_text
 
-from A_medio.config import get_download_dir
+from A_medio.config import (
+    get_cookies_from_browser,
+    get_cookies_from_browser_profile,
+    get_download_dir,
+)
 from A_medio.services.base import MediaService
 from A_medio.services.youtube._wrapper import YtDlpWrapper, get_download_error
 from A_medio.services.youtube._models import YouTubeVideo, BatchResult, EstimateResult
@@ -100,7 +104,15 @@ class YouTubeService(MediaService):
             with_cookie["cookiefile"] = cookies
             candidates.append(with_cookie)
 
-        for browser_spec in _cookie_browser_candidates(cookies_from_browser):
+        # When no explicit --kuketoj-de-retumilo flag, fall back to config
+        effective_browser = cookies_from_browser or get_cookies_from_browser()
+        effective_profile = get_cookies_from_browser_profile() if not cookies_from_browser else None
+
+        for browser_spec in _cookie_browser_candidates(
+            cookies_from_browser,
+            config_browser=effective_browser,
+            config_profile=effective_profile,
+        ):
             with_browser = dict(base_opts)
             if browser_spec is not None:
                 with_browser["cookiesfrombrowser"] = browser_spec
@@ -315,7 +327,10 @@ class YouTubeService(MediaService):
         ydl_opts.update(build_subtitle_opts(opts.get("subtitles")))
         ydl_opts.update(build_cookie_opts(
             cookies=opts.get("cookies"),
-            cookies_from_browser=opts.get("cookies_from_browser"),
+            cookies_from_browser=(
+                opts.get("cookies_from_browser")
+                or get_cookies_from_browser()
+            ),
         ))
 
         before = {p for p in output_dir.iterdir()} if output_dir.exists() else set()
@@ -394,7 +409,10 @@ class YouTubeService(MediaService):
             ydl_opts["playlistend"] = int(opts["playlist_end"])
         ydl_opts.update(build_cookie_opts(
             cookies=opts.get("cookies"),
-            cookies_from_browser=opts.get("cookies_from_browser"),
+            cookies_from_browser=(
+                opts.get("cookies_from_browser")
+                or get_cookies_from_browser()
+            ),
         ))
 
         try:

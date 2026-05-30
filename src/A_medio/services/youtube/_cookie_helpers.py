@@ -108,16 +108,70 @@ def _discover_firefox_profiles(browser_hint: str) -> list[str]:
     return unique
 
 
-def _cookie_browser_candidates(raw: str | None) -> list[tuple[str, ...] | None]:
+def _detect_available_browsers() -> dict[str, list[str]]:
+    """Probe all known Firefox-style browsers for profiles with cookies.
+
+    Iterates over all browsers in ``_BROWSER_FORK_MAP`` that map to
+    ``"firefox"``, plus ``"firefox"`` itself, and calls
+    :func:`_discover_firefox_profiles` for each.
+
+    Returns:
+        Dict mapping browser name (e.g. ``"floorp"``, ``"firefox"``)
+        to a list of absolute profile directory paths that contain
+        a ``cookies.sqlite`` file.  Browsers with no profiles are
+        omitted.
+    """
+    browsers: set[str] = set()
+    for key, val in _BROWSER_FORK_MAP.items():
+        if val == "firefox":
+            browsers.add(key)
+    browsers.add("firefox")
+
+    result: dict[str, list[str]] = {}
+    # Process in predictable order so tests can be deterministic
+    for browser in sorted(browsers):
+        try:
+            profiles = _discover_firefox_profiles(browser)
+        except OSError:
+            profiles = []
+        if profiles:
+            result[browser] = profiles
+    return result
+
+
+def _cookie_browser_candidates(
+    raw: str | None,
+    *,
+    config_browser: str | None = None,
+    config_profile: str | None = None,
+) -> list[tuple[str, ...] | None]:
     """Build a list of ``cookiesfrombrowser`` candidates to try.
 
     Args:
         raw: The ``--kuketoj-de-retumilo`` value, or ``None``.
+        config_browser: Fallback browser name from persistent config.
+            Used when *raw* is ``None``.
+        config_profile: Optional profile path from persistent config.
 
     Returns:
         List of candidate tuples (or ``None`` for no cookies).
     """
     if not raw:
+        if config_browser:
+            # Use saved config preference instead of falling back to None
+            base = (config_browser,)
+            if config_profile:
+                base = (config_browser, config_profile, None, None)
+            candidates: list[tuple[str, ...] | None] = [base]
+            mapped = _BROWSER_FORK_MAP.get(config_browser.lower(), config_browser.lower())
+            if mapped == "firefox" and not config_profile:
+                for profile in _discover_firefox_profiles(config_browser):
+                    spec = (mapped, profile, None, None)
+                    if spec not in candidates:
+                        candidates.append(spec)
+            if None not in candidates:
+                candidates.append(None)
+            return candidates
         return [None]
     value = raw.strip()
     if not value:

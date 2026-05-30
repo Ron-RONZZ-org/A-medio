@@ -13,6 +13,7 @@ from A_medio.services.youtube._cookie_helpers import (
     build_cookie_opts,
     _cookie_browser_candidates,
     _cookie_help_text,
+    _detect_available_browsers,
     _parse_cookies_from_browser,
 )
 from A_medio.services.youtube._csv_helpers import parse_csv_rows
@@ -36,6 +37,7 @@ __all__ = [
     "parse_csv_rows",
     "_cookie_help_text",
     "_cookie_browser_candidates",
+    "_detect_available_browsers",
     "_parse_cookies_from_browser",
     "_save_search_strategy",
     "_load_search_strategy",

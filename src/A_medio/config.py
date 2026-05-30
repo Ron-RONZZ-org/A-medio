@@ -16,6 +16,9 @@ __all__ = [
     "set_setting",
     "get_download_dir",
     "set_download_dir",
+    "get_cookies_from_browser",
+    "set_cookies_from_browser",
+    "get_cookies_from_browser_profile",
 ]
 
 _DEFAULT_DOWNLOAD_DIR = str(data_dir() / "filmetoj")
@@ -25,6 +28,16 @@ _schema = ConfigSchema("A-medio", {
         "type": "str",
         "default": _DEFAULT_DOWNLOAD_DIR,
         "help": "Default download directory",
+    },
+    "cookies_from_browser": {
+        "type": "str",
+        "default": None,
+        "help": "Browser name for auto cookie extraction (floorp, firefox, etc.)",
+    },
+    "cookies_from_browser_profile": {
+        "type": "str",
+        "default": None,
+        "help": "Specific browser profile path for cookie extraction",
     },
 })
 
@@ -73,3 +86,32 @@ def set_download_dir(path: str) -> None:
         path: Absolute path to the download folder.
     """
     set_setting("download_dir", path)
+
+
+def get_cookies_from_browser() -> str | None:
+    """Return the saved browser name for auto cookie extraction.
+
+    Returns:
+        Browser name (floorp, firefox, etc.) or ``None`` if not set.
+    """
+    return get_setting("cookies_from_browser")
+
+
+def set_cookies_from_browser(browser: str | None, profile: str | None = None) -> None:
+    """Save the browser (and optional profile) for auto cookie extraction.
+
+    Args:
+        browser: Browser name (floorp, firefox, etc.) or ``None`` to clear.
+        profile: Optional specific profile path. When ``None``, yt-dlp auto-selects.
+    """
+    set_setting("cookies_from_browser", browser)
+    set_setting("cookies_from_browser_profile", profile)
+
+
+def get_cookies_from_browser_profile() -> str | None:
+    """Return the saved browser profile path for cookie extraction.
+
+    Returns:
+        Profile directory path, or ``None`` if not set.
+    """
+    return get_setting("cookies_from_browser_profile")

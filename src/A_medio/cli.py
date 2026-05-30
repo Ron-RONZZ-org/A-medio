@@ -2,14 +2,23 @@
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 from typing import Any, Optional
 
 import typer
+from rich.table import Table
 
 from A import error, info, tr, tr_multi
-from A_medio.config import get_setting, set_setting
+from A_medio.config import (
+    get_cookies_from_browser,
+    get_setting,
+    set_cookies_from_browser,
+    set_setting,
+)
 from A_medio.services.youtube import get_youtube_service
+from A_medio.services.youtube._cookie_helpers import _detect_available_browsers
+from A_medio.services.youtube._strategy import _load_search_strategy
 
 app = typer.Typer(
     name="medio",
@@ -114,6 +123,151 @@ def config_set(key: str, value: str) -> None:
     ))
 
 
+# ── Helper functions ───────────────────────────────────────────────────────────
+
+
+def _auto_setup_cookies() -> tuple[str | None, str | None]:
+    """Auto-detect browser cookies and prompt user on first call.
+
+    Probes all known Firefox-style browsers for profiles that have
+    ``cookies.sqlite``.  If any are found, shows the user a confirmation
+    prompt and, on acceptance, saves the preference to config.
+
+    Returns:
+        ``(browser_name, profile_path)`` if the user accepted,
+        ``(None, None)`` if no browsers found, user declined, or
+        running non-interactively.
+    """
+    # Only prompt in interactive terminals
+    if not sys.stdin.isatty():
+        return (None, None)
+
+    detected = _detect_available_browsers()
+    if not detected:
+        return (None, None)
+
+    # Pick the first detected browser+profile as the default suggestion
+    browser = next(iter(detected))
+    profiles = detected[browser]
+    profile = profiles[0] if profiles else None
+
+    if profile:
+        prompt_msg = tr_multi(
+            f"Detektis {browser} kuketojn de {profile}. Ĉu uzi por YouTube?",
+            f"Detected {browser} cookies from {profile}. Use for YouTube?",
+            f"Cookies {browser} détectés depuis {profile}. Utiliser pour YouTube ?",
+        )
+    else:
+        prompt_msg = tr_multi(
+            f"Detektis {browser} retumilon. Ĉu uzi kuketojn por YouTube?",
+            f"Detected {browser} browser. Use cookies for YouTube?",
+            f"Navigateur {browser} détecté. Utiliser les cookies pour YouTube ?",
+        )
+
+    from A.utils.interactive import confirm_action
+
+    if not confirm_action(prompt_msg, default=True):
+        info(tr_multi(
+            "Neniu retumilo agordita. Uzu --kuketoj au --kuketoj-de-retumilo permane.",
+            "No browser configured. Use --kuketoj or --kuketoj-de-retumilo manually.",
+            "Aucun navigateur configuré. Utilisez --kuketoj ou --kuketoj-de-retumilo manuellement.",
+        ))
+        return (None, None)
+
+    # Save to persistent config for future calls
+    set_cookies_from_browser(browser, profile)
+    info(tr_multi(
+        f"Konservis {browser} kiel defauxltan retumilon por kuketoj.",
+        f"Saved {browser} as default cookie browser.",
+        f"{browser} enregistré comme navigateur de cookies par défaut.",
+    ))
+    return (browser, profile)
+
+
+def _download_with_confirmation(
+    url: str,
+    youtube: Any,
+    opts: dict[str, Any],
+) -> list[Path]:
+    """Estimate and confirm download before proceeding.
+
+    Runs a dry-run estimation, shows a Rich table preview with title,
+    duration, and file size, then prompts the user before downloading.
+
+    Args:
+        url: YouTube URL to download.
+        youtube: The ``YouTubeService`` instance.
+        opts: Download options forwarded to both :meth:`estimate` and
+            :meth:`download`.
+
+    Returns:
+        List of downloaded file paths (empty if cancelled or failed).
+    """
+    # Only prompt in interactive terminals
+    if not sys.stdin.isatty():
+        return youtube.download(url, **opts)
+
+    estimate = youtube.estimate(url, **opts)
+    if estimate is None or not estimate.items:
+        error(tr_multi(
+            "Ne povis taksi elsxuton. Nuligita.",
+            "Could not estimate download. Cancelled.",
+            "Impossible d'estimer le téléchargement. Annulé.",
+        ))
+        return []
+
+    # Build preview table
+    table = Table(title=tr_multi(
+        "Elsxuta resumo",
+        "Download summary",
+        "Résumé du téléchargement",
+    ))
+    table.add_column(tr_multi("Titolo", "Title", "Titre"))
+    table.add_column(tr_multi("Daŭro", "Duration", "Durée"), width=10)
+    table.add_column(tr_multi("Grandeco", "Size", "Taille"), width=12)
+    for item in estimate.items:
+        title = item.get("title", "-")
+        duration_sec = int(item.get("duration", 0))
+        minutes = duration_sec // 60
+        seconds = duration_sec % 60
+        duration_str = f"{minutes}:{seconds:02d}" if duration_sec > 0 else "-"
+        file_bytes = int(item.get("filesize", 0))
+        if file_bytes > 0:
+            size_str = (
+                f"{file_bytes / 1024 / 1024:.1f} MB"
+                if file_bytes > 1024 * 1024
+                else f"{file_bytes / 1024:.1f} KB"
+            )
+        else:
+            size_str = "-"
+        table.add_row(title, duration_str, size_str)
+
+    info(tr_multi(
+        f"Taksita: {estimate.count} dosiero(j), ~{estimate.total_size_str}",
+        f"Estimated: {estimate.count} file(s), ~{estimate.total_size_str}",
+        f"Estimé : {estimate.count} fichier(s), ~{estimate.total_size_str}",
+    ))
+
+    from A.utils.interactive import confirm_action
+
+    if not confirm_action(
+        tr_multi(
+            "Ĉu daŭrigi elsxuton?",
+            "Continue with download?",
+            "Continuer le téléchargement ?",
+        ),
+        default=True,
+    ):
+        info(tr_multi(
+            "Nuligita.",
+            "Cancelled.",
+            "Annulé.",
+        ))
+        return []
+
+    return youtube.download(url, **opts)
+
+
 # filmeto subcommands
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -184,6 +338,14 @@ def filmeto_serci(
             opts["cookies"] = kuketoj
         if kuketoj_de_retumilo:
             opts["cookies_from_browser"] = kuketoj_de_retumilo
+        # Auto-detect cookies on first call (no explicit flags, no cached strategy)
+        if not kuketoj and not kuketoj_de_retumilo and not _load_search_strategy():
+            browser, profile = _auto_setup_cookies()
+            if browser:
+                if profile:
+                    opts["cookies_from_browser"] = f"{browser}:{profile}"
+                else:
+                    opts["cookies_from_browser"] = browser
         # Playlist search: append " playlist" to seed
         search_query = f"{query} playlist" if playlistoj else query
         results = youtube.search(search_query, **opts)
@@ -388,7 +550,7 @@ def filmeto_eljuti(
             info(f"  {title} [dim]({size_str})[/dim]")
         return
 
-    files = youtube.download(url, **download_opts)
+    files = _download_with_confirmation(url, youtube, download_opts)
 
     if files:
         info(tr_multi(
