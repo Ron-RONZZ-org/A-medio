@@ -167,6 +167,32 @@ class TestYtDlpWrapper:
                     pass
 
 
+    def test_ensure_installed_fast_path(self) -> None:
+        """Returns True immediately when yt-dlp is already available."""
+        wrapper = YtDlpWrapper()
+        wrapper._available = True
+        assert wrapper.ensure_installed() is True
+
+    def test_ensure_installed_calls_ensure_dependency(self) -> None:
+        """When missing, delegates to ensure_dependency('yt_dlp', 'yt-dlp')."""
+        wrapper = YtDlpWrapper()
+        wrapper._available = False
+
+        with patch("A.utils.deps.ensure_dependency") as mock_ed:
+            result = wrapper.ensure_installed()
+            mock_ed.assert_called_once_with("yt_dlp", "yt-dlp", timeout=120)
+            # When ensure_dependency succeeds, wrapper re-checks availability
+            assert result is False  # yt-dlp still not actually importable
+
+    def test_ensure_installed_import_error(self) -> None:
+        """Returns False when ensure_dependency raises ImportError."""
+        wrapper = YtDlpWrapper()
+        wrapper._available = False
+
+        with patch("A.utils.deps.ensure_dependency", side_effect=ImportError("fail")):
+            assert wrapper.ensure_installed() is False
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # YouTubeVideo
 # ═══════════════════════════════════════════════════════════════════════════════
