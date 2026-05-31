@@ -111,14 +111,35 @@ Two sources supported, passed as yt-dlp options:
 | ``--kuketoj <path>`` | ``cookiefile`` | ``--kuketoj /tmp/cookies.txt`` |
 | ``--kuketoj-de-retumilo <browser>[:<profile>]`` | ``cookiesfrombrowser`` | ``--kuketoj-de-retumilo floorp`` |
 
-**Retry strategy:** Search tries multiple cookie sources in order:
-1. Cached successful strategy (from previous search)
-2. Explicit ``--kuketoj`` file
-3. Auto-discovered browser profiles (Firefox forks: floorp, librewolf, waterfox, zen)
-4. Config-saved browser preference (from auto-setup prompt)
-5. No cookies (bare fallback)
+**Retry strategy:** All yt-dlp operations (search, estimate, download) try multiple
+cookie sources in order. A shared helper ``_build_cookie_candidates()`` in
+``service.py`` builds the candidate list:
 
-Certificate errors and empty results trigger automatic fallback retries.
+1. Explicit ``--kuketoj`` file (if provided)
+2. Browser cookies (explicit flag ``--kuketoj-de-retumilo`` or config fallback)
+3. No cookies (bare fallback)
+
+**Search** additionally probes auto-discovered browser profiles and the cached
+search strategy before falling back. Certificate errors and empty results trigger
+automatic retries in search.
+
+**Estimate** (``estimate()``) tries each candidate in order. If one succeeds
+(returns a non-``None`` info dict), its result is used. If all candidates fail,
+returns ``None`` with an error message from the last exception. Single-entry
+playlist wrapping from yt-dlp is unwrapped automatically.
+
+**Download** (``download()``) tries each candidate in order. If a candidate
+produces files (diff from ``before`` snapshot), it is considered successful and
+the loop breaks. If no files are created and an error was captured, the last
+error is shown. If no files are created without error, ``"Neniu dosiero
+elsxutita."`` is shown.
+
+**Important:** Config-saved browser fork names (``floorp``, ``librewolf``, etc.)
+are mapped to their yt-dlp-compatible base name (``firefox``) via
+``_BROWSER_FORK_MAP`` before being passed to yt-dlp's ``cookiesfrombrowser``.
+The explicit CLI flag path uses ``_parse_cookies_from_browser()`` which maps
+correctly; the config path in ``_cookie_browser_candidates()`` does the same
+mapping via ``mapped_browser = _BROWSER_FORK_MAP.get(raw_browser, raw_browser)``.
 
 **Auto cookie setup on first call:**
 On the first ``serci`` or ``eljuti`` (single-URL) call without ``--kuketoj`` or

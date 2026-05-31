@@ -22,7 +22,7 @@ from A_medio.services.base import MediaService
 from A_medio.services.youtube._wrapper import YtDlpWrapper, get_download_error
 from A_medio.services.youtube._models import YouTubeVideo, BatchResult, EstimateResult
 from A_medio.services.youtube._format_helpers import build_format_selector, build_subtitle_opts
-from A_medio.services.youtube._cookie_helpers import build_cookie_opts, _cookie_browser_candidates
+from A_medio.services.youtube._cookie_helpers import _cookie_browser_candidates
 from A_medio.services.youtube._strategy import _load_search_strategy, _save_search_strategy
 from A_medio.services.youtube._csv_helpers import parse_csv_rows
 from A_medio.data.storage import get_db
@@ -65,6 +65,56 @@ class YouTubeService(MediaService):
     def get_download_dir(self) -> str:
         """Return the configured download directory."""
         return get_download_dir()
+
+    # ── shared helpers ────────────────────────────────────────────────────
+
+    def _build_cookie_candidates(
+        self,
+        base_opts: dict[str, Any],
+        *,
+        cookies: str | None = None,
+        cookies_from_browser: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Build yt-dlp opts variants with different cookie sources.
+
+        Returns candidates in priority order:
+        1. Explicit ``--kuketoj`` file (if provided)
+        2. Browser cookies (explicit flag or config fallback)
+        3. Bare fallback (no cookies)
+
+        Each candidate is a *copy* of ``base_opts`` with cookie options added.
+        """
+        candidates: list[dict[str, Any]] = []
+
+        # 1. Explicit --kuketoj file
+        if cookies:
+            with_cookie = dict(base_opts)
+            with_cookie["cookiefile"] = cookies
+            candidates.append(with_cookie)
+
+        # 2. Browser cookies (explicit or config fallback)
+        effective_browser = cookies_from_browser or get_cookies_from_browser()
+        effective_profile = (
+            get_cookies_from_browser_profile()
+            if not cookies_from_browser else None
+        )
+
+        for browser_spec in _cookie_browser_candidates(
+            cookies_from_browser,
+            config_browser=effective_browser,
+            config_profile=effective_profile,
+        ):
+            with_browser = dict(base_opts)
+            if browser_spec is not None:
+                with_browser["cookiesfrombrowser"] = browser_spec
+            candidates.append(with_browser)
+
+        # 3. Bare fallback (no cookies) — ensure it appears at least once
+        bare = dict(base_opts)
+        if bare not in candidates:
+            candidates.append(bare)
+
+        return candidates
 
     # ── search ────────────────────────────────────────────────────────────
 
@@ -320,7 +370,7 @@ class YouTubeService(MediaService):
         default_template = "%(title).80s [%(id)s].%(ext)s"
         outtmpl = opts.get("outtmpl", default_template)
 
-        ydl_opts: dict[str, Any] = {
+        base_ydl_opts: dict[str, Any] = {
             "quiet": True,
             "no_warnings": True,
             "format": format_sel,
@@ -328,31 +378,39 @@ class YouTubeService(MediaService):
             "ignoreerrors": True,
         }
         if opts.get("playlist_end") is not None:
-            ydl_opts["playlistend"] = int(opts["playlist_end"])
-        ydl_opts.update(build_subtitle_opts(opts.get("subtitles")))
-        ydl_opts.update(build_cookie_opts(
+            base_ydl_opts["playlistend"] = int(opts["playlist_end"])
+        base_ydl_opts.update(build_subtitle_opts(opts.get("subtitles")))
+
+        candidates = self._build_cookie_candidates(
+            base_ydl_opts,
             cookies=opts.get("cookies"),
-            cookies_from_browser=(
-                opts.get("cookies_from_browser")
-                or get_cookies_from_browser()
-            ),
-        ))
+            cookies_from_browser=opts.get("cookies_from_browser"),
+        )
 
         before = {p for p in output_dir.iterdir()} if output_dir.exists() else set()
+        last_error: Exception | None = None
 
-        try:
-            with self._wrapper.create_ydl(ydl_opts) as ydl:
-                ydl.extract_info(url, download=True)
-        except get_download_error() as exc:
-            error(tr_multi(
-                f"Elsxuto fiaskis: {exc}",
-                f"Download failed: {exc}",
-                f"Telechargement echoue: {exc}",
-            ))
-            return []
+        for ydl_opts in candidates:
+            try:
+                with self._wrapper.create_ydl(ydl_opts) as ydl:
+                    ydl.extract_info(url, download=True)
+
+                # Check if anything was actually created
+                after = {p for p in output_dir.iterdir()}
+                if after - before:
+                    break  # success
+            except get_download_error() as exc:
+                last_error = exc
 
         after = {p for p in output_dir.iterdir()}
         created = sorted(after - before, key=lambda p: p.name)
+
+        if not created and last_error:
+            error(tr_multi(
+                f"Elsxuto fiaskis: {last_error}",
+                f"Download failed: {last_error}",
+                f"Telechargement echoue: {last_error}",
+            ))
 
         if created:
             info(tr_multi(
@@ -403,7 +461,7 @@ class YouTubeService(MediaService):
             audio_bitrate=opts.get("audio_bitrate"),
         )
 
-        ydl_opts: dict[str, Any] = {
+        base_ydl_opts: dict[str, Any] = {
             "quiet": True,
             "no_warnings": True,
             "format": format_sel,
@@ -411,24 +469,45 @@ class YouTubeService(MediaService):
             "ignoreerrors": True,
         }
         if opts.get("playlist_end") is not None:
-            ydl_opts["playlistend"] = int(opts["playlist_end"])
-        ydl_opts.update(build_cookie_opts(
-            cookies=opts.get("cookies"),
-            cookies_from_browser=(
-                opts.get("cookies_from_browser")
-                or get_cookies_from_browser()
-            ),
-        ))
+            base_ydl_opts["playlistend"] = int(opts["playlist_end"])
 
-        try:
-            with self._wrapper.create_ydl(ydl_opts) as ydl:
-                info_data = ydl.extract_info(url, download=False)
-        except get_download_error() as exc:
-            error(tr_multi(
-                f"Takso fiaskis: {exc}",
-                f"Estimation failed: {exc}",
-                f"Estimation echouee: {exc}",
-            ))
+        candidates = self._build_cookie_candidates(
+            base_ydl_opts,
+            cookies=opts.get("cookies"),
+            cookies_from_browser=opts.get("cookies_from_browser"),
+        )
+
+        last_error: Exception | None = None
+        info_data: dict[str, Any] | None = None
+
+        for ydl_opts in candidates:
+            try:
+                with self._wrapper.create_ydl(ydl_opts) as ydl:
+                    raw = ydl.extract_info(url, download=False)
+            except get_download_error() as exc:
+                last_error = exc
+                continue
+
+            # ignoreerrors=True can return None; try next candidate
+            if raw is None:
+                continue
+
+            # Unwrap single-entry playlist that yt-dlp sometimes wraps
+            if isinstance(raw, dict):
+                entries = raw.get("entries")
+                if isinstance(entries, list) and len(entries) == 1 and entries[0] is not None:
+                    raw = entries[0]
+
+            info_data = raw
+            break
+
+        if info_data is None:
+            if last_error:
+                error(tr_multi(
+                    f"Takso fiaskis: {last_error}",
+                    f"Estimation failed: {last_error}",
+                    f"Estimation echouee: {last_error}",
+                ))
             return None
 
         items_list: list[dict[str, Any]] = []
