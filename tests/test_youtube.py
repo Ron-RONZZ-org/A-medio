@@ -366,7 +366,6 @@ class TestFilmetoEljutiCLI:
 
         with (
             patch("A_medio.cli.get_youtube_service") as mock_get,
-            patch("A_medio.cli._load_search_strategy", return_value={}),
             patch("A_medio.cli._auto_setup_cookies", return_value=(None, None)),
         ):
             mock_service = MagicMock()
@@ -397,7 +396,6 @@ class TestFilmetoEljutiCLI:
 
         with (
             patch("A_medio.cli.get_youtube_service") as mock_get,
-            patch("A_medio.cli._load_search_strategy", return_value={}),
             patch("A_medio.cli._auto_setup_cookies", return_value=(None, None)),
         ):
             mock_service = MagicMock()
@@ -433,7 +431,6 @@ class TestFilmetoEljutiCLI:
 
         with (
             patch("A_medio.cli.get_youtube_service") as mock_get,
-            patch("A_medio.cli._load_search_strategy", return_value={}),
             patch("A_medio.cli._auto_setup_cookies", return_value=(None, None)),
         ):
             mock_service = MagicMock()
@@ -459,7 +456,6 @@ class TestFilmetoEljutiCLI:
 
         with (
             patch("A_medio.cli.get_youtube_service") as mock_get,
-            patch("A_medio.cli._load_search_strategy", return_value={}),
             patch("A_medio.cli._auto_setup_cookies", return_value=(None, None)),
         ):
             mock_service = MagicMock()
@@ -1824,8 +1820,8 @@ class TestDownloadWithConfirmation:
 class TestCLICookieAutoSetup:
     """Integration tests for auto-setup flow in serci command."""
 
-    def test_serci_skips_auto_when_cached_strategy(self) -> None:
-        """When cached strategy exists, auto-setup is NOT called."""
+    def test_serci_skips_auto_when_config_has_browser(self) -> None:
+        """When config has a saved browser, auto-setup is NOT called."""
         from typer.testing import CliRunner
 
         from A_medio.cli import app
@@ -1834,7 +1830,7 @@ class TestCLICookieAutoSetup:
 
         with (
             patch("A_medio.cli.get_youtube_service") as mock_get,
-            patch("A_medio.cli._load_search_strategy", return_value={"opts": {"cookiesfrombrowser": ("firefox",)}}),
+            patch("A_medio.cli.get_cookies_from_browser", return_value="floorp"),
             patch("A_medio.cli._auto_setup_cookies") as mock_auto,
         ):
             mock_service = MagicMock()
@@ -1858,7 +1854,7 @@ class TestCLICookieAutoSetup:
 
         with (
             patch("A_medio.cli.get_youtube_service") as mock_get,
-            patch("A_medio.cli._load_search_strategy") as mock_load,
+            patch("A_medio.cli.get_cookies_from_browser") as mock_get_cookies,
             patch("A_medio.cli._auto_setup_cookies") as mock_auto,
         ):
             mock_service = MagicMock()
@@ -1874,12 +1870,11 @@ class TestCLICookieAutoSetup:
             ])
 
         mock_auto.assert_not_called()
-        # _load_search_strategy should NOT be called when explicit flags present
-        # (it's skipped because kuketoj is truthy)
-        mock_load.assert_not_called()
+        # get_cookies_from_browser should NOT be called when explicit flags present
+        mock_get_cookies.assert_not_called()
 
     def test_serci_triggers_auto_on_first_call(self) -> None:
-        """When no strategy cached and no flags, auto-setup triggers."""
+        """When no config browser and no flags, auto-setup triggers."""
         from typer.testing import CliRunner
 
         from A_medio.cli import app
@@ -1888,7 +1883,7 @@ class TestCLICookieAutoSetup:
 
         with (
             patch("A_medio.cli.get_youtube_service") as mock_get,
-            patch("A_medio.cli._load_search_strategy", return_value={}),
+            patch("A_medio.cli.get_cookies_from_browser", return_value=None),
             patch("A_medio.cli._auto_setup_cookies", return_value=("floorp", "/prof")),
         ):
             mock_service = MagicMock()
@@ -1917,7 +1912,7 @@ class TestCLICookieAutoSetup:
 
         with (
             patch("A_medio.cli.get_youtube_service") as mock_get,
-            patch("A_medio.cli._load_search_strategy", return_value={}),
+            patch("A_medio.cli.get_cookies_from_browser", return_value=None),
             patch("A_medio.cli._auto_setup_cookies", return_value=(None, None)),
         ):
             mock_service = MagicMock()
@@ -2052,7 +2047,7 @@ class TestEljutiCookieAutoSetup:
     """Cookie auto-setup on ``eljuti`` first call."""
 
     def test_eljuti_triggers_auto_on_first_call(self) -> None:
-        """No flags + no strategy → auto-setup called, cookies pass to download."""
+        """No flags + no config browser → auto-setup called, cookies pass to download."""
         from typer.testing import CliRunner
         from A_medio.cli import app
 
@@ -2060,7 +2055,7 @@ class TestEljutiCookieAutoSetup:
 
         with (
             patch("A_medio.cli.get_youtube_service") as mock_get,
-            patch("A_medio.cli._load_search_strategy", return_value={}),
+            patch("A_medio.cli.get_cookies_from_browser", return_value=None),
             patch("A_medio.cli._auto_setup_cookies", return_value=("floorp", "/prof")),
         ):
             mock_service = MagicMock()
@@ -2086,7 +2081,7 @@ class TestEljutiCookieAutoSetup:
 
         with (
             patch("A_medio.cli.get_youtube_service") as mock_get,
-            patch("A_medio.cli._load_search_strategy", return_value={}),
+            patch("A_medio.cli.get_cookies_from_browser") as mock_get_cookies,
             patch("A_medio.cli._auto_setup_cookies") as mock_auto,
         ):
             mock_service = MagicMock()
@@ -2101,9 +2096,10 @@ class TestEljutiCookieAutoSetup:
             ])
 
             mock_auto.assert_not_called()
+            mock_get_cookies.assert_not_called()
 
-    def test_eljuti_skips_auto_when_cached_strategy(self) -> None:
-        """Cached search strategy → auto-setup skipped."""
+    def test_eljuti_skips_auto_when_config_has_browser(self) -> None:
+        """Config-saved browser → auto-setup skipped."""
         from typer.testing import CliRunner
         from A_medio.cli import app
 
@@ -2111,7 +2107,7 @@ class TestEljutiCookieAutoSetup:
 
         with (
             patch("A_medio.cli.get_youtube_service") as mock_get,
-            patch("A_medio.cli._load_search_strategy", return_value={"opts": {}}),
+            patch("A_medio.cli.get_cookies_from_browser", return_value="floorp"),
             patch("A_medio.cli._auto_setup_cookies") as mock_auto,
         ):
             mock_service = MagicMock()
@@ -2135,7 +2131,7 @@ class TestEljutiCookieAutoSetup:
 
         with (
             patch("A_medio.cli.get_youtube_service") as mock_get,
-            patch("A_medio.cli._load_search_strategy", return_value={}),
+            patch("A_medio.cli.get_cookies_from_browser", return_value=None),
             patch("A_medio.cli._auto_setup_cookies", return_value=(None, None)),
         ):
             mock_service = MagicMock()
@@ -2161,7 +2157,7 @@ class TestEljutiCookieAutoSetup:
 
         with (
             patch("A_medio.cli.get_youtube_service") as mock_get,
-            patch("A_medio.cli._load_search_strategy", return_value={}),
+            patch("A_medio.cli.get_cookies_from_browser", return_value=None),
             patch("A_medio.cli._auto_setup_cookies", return_value=(None, None)),
         ):
             mock_service = MagicMock()
@@ -2190,7 +2186,7 @@ class TestEljutiCookieAutoSetup:
 
         with (
             patch("A_medio.cli.get_youtube_service") as mock_get,
-            patch("A_medio.cli._load_search_strategy", return_value={}),
+            patch("A_medio.cli.get_cookies_from_browser", return_value=None),
             patch("A_medio.cli._auto_setup_cookies", return_value=(None, None)),
         ):
             mock_service = MagicMock()

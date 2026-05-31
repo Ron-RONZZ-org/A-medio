@@ -122,7 +122,7 @@ Certificate errors and empty results trigger automatic fallback retries.
 
 **Auto cookie setup on first call:**
 On the first ``serci`` or ``eljuti`` (single-URL) call without ``--kuketoj`` or
-``--kuketoj-de-retumilo`` flags:
+``--kuketoj-de-retumilo`` flags **and** no browser saved in config yet:
 1. ``_auto_setup_cookies()`` in ``cli.py`` calls ``_detect_available_browsers()`` to probe all Firefox-style browser roots
 2. If a browser with ``cookies.sqlite`` is found, prompts the user: *"Detected Floorp cookies from ~/.floorp/xxx.default. Use for YouTube?"*
 3. On confirmation, saves the browser (and optional profile path) to persistent config
@@ -130,6 +130,11 @@ On the first ``serci`` or ``eljuti`` (single-URL) call without ``--kuketoj`` or
 5. Uses ``A.utils.interactive.confirm_action`` for the prompt
 6. Non-interactive terminals (piped, scripted) skip auto-setup silently
 7. Explicit ``--kuketoj`` or ``--kuketoj-de-retumilo`` flags always take precedence over config
+
+**Important:** The guard uses ``get_cookies_from_browser()`` (config-stored browser), NOT
+``_load_search_strategy()``. This prevents a scenario where search succeeds without
+cookies (returning partial metadata) and caches a strategy, which would otherwise
+block the cookie prompt on subsequent ``eljuti`` calls.
 
 **Config keys:**
 - ``cookies_from_browser`` (str|None) — browser name saved from auto-setup

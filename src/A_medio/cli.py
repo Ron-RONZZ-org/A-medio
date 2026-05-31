@@ -18,7 +18,6 @@ from A_medio.config import (
 )
 from A_medio.services.youtube import get_youtube_service
 from A_medio.services.youtube._cookie_helpers import _detect_available_browsers
-from A_medio.services.youtube._strategy import _load_search_strategy
 
 app = typer.Typer(
     name="medio",
@@ -389,8 +388,8 @@ def filmeto_serci(
             opts["cookies"] = kuketoj
         if kuketoj_de_retumilo:
             opts["cookies_from_browser"] = kuketoj_de_retumilo
-        # Auto-detect cookies on first call (no explicit flags, no cached strategy)
-        if not kuketoj and not kuketoj_de_retumilo and not _load_search_strategy():
+        # Auto-detect cookies on first call (no explicit flags, no config-saved browser)
+        if not kuketoj and not kuketoj_de_retumilo and not get_cookies_from_browser():
             browser, profile = _auto_setup_cookies()
             if browser:
                 if profile:
@@ -571,7 +570,7 @@ def filmeto_eljuti(
         return
 
     # ── Cookie auto-setup (same guard as serci) ──────────────────────────
-    if not kuketoj and not kuketoj_de_retumilo and not _load_search_strategy():
+    if not kuketoj and not kuketoj_de_retumilo and not get_cookies_from_browser():
         browser, profile = _auto_setup_cookies()
         if browser:
             kuketoj_de_retumilo = (

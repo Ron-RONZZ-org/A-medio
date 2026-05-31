@@ -60,6 +60,30 @@ def get_download_error() -> type[DownloadError]:
     return _download_error_class
 
 
+# ── Null logger to suppress yt-dlp stderr noise ─────────────────────────
+
+
+class _NullLogger:
+    """Logger that swallows all yt-dlp output.
+
+    yt-dlp prints ``ERROR:`` messages to stderr even with ``quiet=True``.
+    We handle errors ourselves via ``DownloadError`` exceptions, so this
+    logger prevents duplicate noise reaching the user.
+    """
+
+    def debug(self, msg: str) -> None:  # noqa: ARG002
+        pass
+
+    def info(self, msg: str) -> None:  # noqa: ARG002
+        pass
+
+    def warning(self, msg: str) -> None:  # noqa: ARG002
+        pass
+
+    def error(self, msg: str) -> None:  # noqa: ARG002
+        pass
+
+
 # ── YtDlpWrapper singleton ──────────────────────────────────────────────
 
 
@@ -132,7 +156,9 @@ class YtDlpWrapper:
         """
         if not self.is_available():
             raise RuntimeError("yt-dlp is not available")
-        ydl = get_ytdl_class()(opts or {})
+        final_opts = dict(opts or {})
+        final_opts.setdefault("logger", _NullLogger())
+        ydl = get_ytdl_class()(final_opts)
         try:
             yield ydl
         finally:
