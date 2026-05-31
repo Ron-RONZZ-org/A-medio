@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import shutil
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any, Generator
 
@@ -61,6 +62,31 @@ def get_download_error() -> type[DownloadError]:
 
 
 # ── Null logger to suppress yt-dlp stderr noise ─────────────────────────
+
+
+def auto_js_runtimes() -> dict[str, dict[str, str]] | None:
+    """Auto-detect available JavaScript runtimes for yt-dlp.
+
+    yt-dlp needs a JS runtime (deno, node, quickjs, bun) to solve
+    YouTube's JS challenges (n-parameter deciphering).  Only ``deno``
+    is enabled by default; other runtimes must be explicitly declared
+    via the ``js_runtimes`` option.
+
+    Returns:
+        A ``js_runtimes``-compatible dict (``{name: {"path": "/bin/…"}}``)
+        or ``None`` if no runtime was found.
+    """
+    runtimes: dict[str, dict[str, str]] = {}
+    for runtime, binary in (
+        ("deno", "deno"),
+        ("node", "node"),
+        ("quickjs", "qjs"),
+        ("bun", "bun"),
+    ):
+        path = shutil.which(binary)
+        if path:
+            runtimes[runtime] = {"path": path}
+    return runtimes or None
 
 
 class _NullLogger:
@@ -158,6 +184,10 @@ class YtDlpWrapper:
             raise RuntimeError("yt-dlp is not available")
         final_opts = dict(opts or {})
         final_opts.setdefault("logger", _NullLogger())
+        if "js_runtimes" not in final_opts:
+            runtimes = auto_js_runtimes()
+            if runtimes:
+                final_opts["js_runtimes"] = runtimes
         ydl = get_ytdl_class()(final_opts)
         try:
             yield ydl

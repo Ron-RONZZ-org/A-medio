@@ -11,6 +11,7 @@ from A_medio.services.youtube import (
     YouTubeService,
     YouTubeVideo,
     YtDlpWrapper,
+    auto_js_runtimes,
     build_format_selector,
     build_subtitle_opts,
     build_cookie_opts,
@@ -191,6 +192,59 @@ class TestYtDlpWrapper:
 
         with patch("A.utils.deps.ensure_dependency", side_effect=ImportError("fail")):
             assert wrapper.ensure_installed() is False
+
+    def test_create_ydl_injects_js_runtimes(self) -> None:
+        """``create_ydl()`` injects ``js_runtimes`` when a JS runtime is found."""
+        import types
+        mock_mod = types.ModuleType("yt_dlp")
+        mock_mod.YoutubeDL = MagicMock()
+
+        def fake_which(binary: str) -> str | None:
+            return "/usr/bin/node" if binary == "node" else None
+
+        with (
+            patch.dict("sys.modules", {"yt_dlp": mock_mod}),
+            patch("A_medio.services.youtube._wrapper.shutil.which", fake_which),
+        ):
+            wrapper = YtDlpWrapper()
+            wrapper._available = True
+            with wrapper.create_ydl({"format": "best"}):
+                pass
+
+        call_opts = mock_mod.YoutubeDL.call_args[0][0]
+        assert call_opts.get("js_runtimes") == {"node": {"path": "/usr/bin/node"}}
+
+
+class TestAutoJsRuntimes:
+    """``auto_js_runtimes()`` — JS runtime detection for yt-dlp."""
+
+    def test_detects_installed_runtime(self) -> None:
+        """Returns detected runtime when ``shutil.which`` finds one."""
+        def fake_which(binary: str) -> str | None:
+            return "/usr/bin/node" if binary == "node" else None
+        with patch("A_medio.services.youtube._wrapper.shutil.which", fake_which):
+            result = auto_js_runtimes()
+        assert result == {"node": {"path": "/usr/bin/node"}}
+
+    def test_returns_none_when_no_runtime(self) -> None:
+        """Returns ``None`` when no JS runtime is found."""
+        with patch("A_medio.services.youtube._wrapper.shutil.which",
+                   return_value=None):
+            result = auto_js_runtimes()
+        assert result is None
+
+    def test_detects_multiple_runtimes(self) -> None:
+        """Multiple available runtimes are all returned."""
+        def fake_which(binary: str) -> str | None:
+            paths = {"deno": "/usr/bin/deno", "node": "/usr/bin/node"}
+            return paths.get(binary)
+
+        with patch("A_medio.services.youtube._wrapper.shutil.which", fake_which):
+            result = auto_js_runtimes()
+        assert result == {
+            "deno": {"path": "/usr/bin/deno"},
+            "node": {"path": "/usr/bin/node"},
+        }
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

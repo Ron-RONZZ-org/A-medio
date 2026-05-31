@@ -6,7 +6,7 @@ Re-exports all public symbols from the sub-modules for backward compatibility.
 from __future__ import annotations
 
 from A_medio.config import get_download_dir
-from A_medio.services.youtube._wrapper import YtDlpWrapper, get_download_error
+from A_medio.services.youtube._wrapper import YtDlpWrapper, auto_js_runtimes, get_download_error
 from A_medio.services.youtube._models import YouTubeVideo, BatchResult, EstimateResult
 from A_medio.services.youtube._format_helpers import build_format_selector, build_subtitle_opts
 from A_medio.services.youtube._cookie_helpers import (
