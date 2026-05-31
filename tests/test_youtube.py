@@ -364,7 +364,11 @@ class TestFilmetoEljutiCLI:
 
         runner = CliRunner()
 
-        with patch("A_medio.cli.get_youtube_service") as mock_get:
+        with (
+            patch("A_medio.cli.get_youtube_service") as mock_get,
+            patch("A_medio.cli._load_search_strategy", return_value={}),
+            patch("A_medio.cli._auto_setup_cookies", return_value=(None, None)),
+        ):
             mock_service = MagicMock()
             # Make yt-dlp available
             mock_service.is_available.return_value = True
@@ -391,7 +395,11 @@ class TestFilmetoEljutiCLI:
 
         runner = CliRunner()
 
-        with patch("A_medio.cli.get_youtube_service") as mock_get:
+        with (
+            patch("A_medio.cli.get_youtube_service") as mock_get,
+            patch("A_medio.cli._load_search_strategy", return_value={}),
+            patch("A_medio.cli._auto_setup_cookies", return_value=(None, None)),
+        ):
             mock_service = MagicMock()
             mock_service.is_available.return_value = True
             mock_service.get_download_dir.return_value = "/tmp/medio"
@@ -423,7 +431,11 @@ class TestFilmetoEljutiCLI:
 
         runner = CliRunner()
 
-        with patch("A_medio.cli.get_youtube_service") as mock_get:
+        with (
+            patch("A_medio.cli.get_youtube_service") as mock_get,
+            patch("A_medio.cli._load_search_strategy", return_value={}),
+            patch("A_medio.cli._auto_setup_cookies", return_value=(None, None)),
+        ):
             mock_service = MagicMock()
             mock_service.is_available.return_value = False
             mock_service.ensure_installed.return_value = False
@@ -445,7 +457,11 @@ class TestFilmetoEljutiCLI:
 
         runner = CliRunner()
 
-        with patch("A_medio.cli.get_youtube_service") as mock_get:
+        with (
+            patch("A_medio.cli.get_youtube_service") as mock_get,
+            patch("A_medio.cli._load_search_strategy", return_value={}),
+            patch("A_medio.cli._auto_setup_cookies", return_value=(None, None)),
+        ):
             mock_service = MagicMock()
             mock_service.is_available.side_effect = [False, True]  # unavailable → install → now available
             mock_service.ensure_installed.return_value = True
@@ -1917,3 +1933,277 @@ class TestCLICookieAutoSetup:
             mock_service.search.assert_called_once()
             _call_kwargs = mock_service.search.call_args[1]
             assert "cookies_from_browser" not in _call_kwargs
+
+
+class TestResolveOutputTemplate:
+    """``_resolve_output_template()`` path resolution."""
+
+    def test_existing_dir_returns_default_template(self, tmp_path: Path) -> None:
+        """Existing directory → use as-is with default template."""
+        from A_medio.cli import _resolve_output_template, _DEFAULT_OUTTMPL
+
+        d = tmp_path / "videos"
+        d.mkdir()
+        resolved_dir, outtmpl = _resolve_output_template(str(d))
+        assert resolved_dir == d.resolve()
+        assert outtmpl == _DEFAULT_OUTTMPL
+
+    def test_trailing_slash_creates_dir(self, tmp_path: Path) -> None:
+        """Trailing slash → create directory, default template."""
+        from A_medio.cli import _resolve_output_template, _DEFAULT_OUTTMPL
+
+        d = tmp_path / "newdir"
+        resolved_dir, outtmpl = _resolve_output_template(f"{d}/")
+        assert resolved_dir.exists()
+        assert outtmpl == _DEFAULT_OUTTMPL
+
+    def test_file_with_ext_uses_stem(self, tmp_path: Path) -> None:
+        """``"myvideo.mp4"`` → parent dir, ``"myvideo.%(ext)s"``."""
+        from A_medio.cli import _resolve_output_template
+
+        path_str = str(tmp_path / "myvideo.mp4")
+        resolved_dir, outtmpl = _resolve_output_template(path_str)
+        assert resolved_dir == tmp_path.resolve()
+        assert outtmpl == "myvideo.%(ext)s"
+
+    def test_absolute_nonexistent_dir(self, tmp_path: Path) -> None:
+        """Non-existent path, no ext, >1 part → treated as directory."""
+        from A_medio.cli import _resolve_output_template, _DEFAULT_OUTTMPL
+
+        d = tmp_path / "a" / "b" / "c"
+        resolved_dir, outtmpl = _resolve_output_template(str(d))
+        assert outtmpl == _DEFAULT_OUTTMPL
+
+    def test_bare_name_no_ext_single_part(self, tmp_path: Path) -> None:
+        """Bare name without extension and single part → file template."""
+        from A_medio.cli import _resolve_output_template
+
+        resolved_dir, outtmpl = _resolve_output_template("myvideo")
+        # single part, no ext → Rule 4 (not Rule 3 since not >1 part)
+        assert outtmpl == "myvideo.%(ext)s"
+
+    def test_absolute_file_path(self, tmp_path: Path) -> None:
+        """Absolute path with extension → parent dir, stem template."""
+        from A_medio.cli import _resolve_output_template
+
+        f = tmp_path / "sub" / "video.mp4"
+        resolved_dir, outtmpl = _resolve_output_template(str(f))
+        assert resolved_dir == (tmp_path / "sub").resolve()
+        assert outtmpl == "video.%(ext)s"
+
+    def test_home_expansion(self) -> None:
+        """``~/some_dir`` resolves home, directory rule."""
+        from A_medio.cli import _resolve_output_template, _DEFAULT_OUTTMPL
+
+        import os
+        home = Path.home()
+        # Use a non-existent path under home with >1 parts → Rule 3 (directory)
+        p = home / "A_medio_test_delete_me" / "sub"
+        resolved_dir, outtmpl = _resolve_output_template(str(p))
+        assert outtmpl == _DEFAULT_OUTTMPL
+
+
+class TestDownloadWithOuttmpl:
+    """``download()`` custom ``outtmpl`` handling."""
+
+    def test_download_uses_custom_outtmpl(self) -> None:
+        """Custom ``outtmpl`` is passed through to yt-dlp opts."""
+        from A_medio.services.youtube.service import YouTubeService
+
+        service = YouTubeService()
+        with (
+            patch.object(service, "is_available", return_value=True),
+            patch.object(service, "_wrapper") as mock_wrapper,
+        ):
+            mock_ydl = MagicMock()
+            mock_wrapper.create_ydl.return_value = mock_ydl
+
+            service.download(
+                "https://youtu.be/abc",
+                output_dir="/tmp",
+                outtmpl="myvideo.%(ext)s",
+            )
+
+            _call_ydl_opts = mock_wrapper.create_ydl.call_args[0][0]
+            assert _call_ydl_opts["outtmpl"] == "/tmp/myvideo.%(ext)s"
+
+    def test_download_default_outtmpl(self) -> None:
+        """Without ``outtmpl``, default template is used."""
+        from A_medio.services.youtube.service import YouTubeService
+
+        service = YouTubeService()
+        with (
+            patch.object(service, "is_available", return_value=True),
+            patch.object(service, "_wrapper") as mock_wrapper,
+        ):
+            mock_ydl = MagicMock()
+            mock_wrapper.create_ydl.return_value = mock_ydl
+
+            service.download(
+                "https://youtu.be/abc",
+                output_dir="/tmp",
+            )
+
+            _call_ydl_opts = mock_wrapper.create_ydl.call_args[0][0]
+            assert "%(title).80s [%(id)s].%(ext)s" in _call_ydl_opts["outtmpl"]
+
+
+class TestEljutiCookieAutoSetup:
+    """Cookie auto-setup on ``eljuti`` first call."""
+
+    def test_eljuti_triggers_auto_on_first_call(self) -> None:
+        """No flags + no strategy → auto-setup called, cookies pass to download."""
+        from typer.testing import CliRunner
+        from A_medio.cli import app
+
+        runner = CliRunner()
+
+        with (
+            patch("A_medio.cli.get_youtube_service") as mock_get,
+            patch("A_medio.cli._load_search_strategy", return_value={}),
+            patch("A_medio.cli._auto_setup_cookies", return_value=("floorp", "/prof")),
+        ):
+            mock_service = MagicMock()
+            mock_service.is_available.return_value = True
+            mock_service.download.return_value = []
+            mock_get.return_value = mock_service
+
+            runner.invoke(app, [
+                "filmeto", "eljuti",
+                "https://youtu.be/abc",
+            ])
+
+            mock_service.download.assert_called_once()
+            _call_kwargs = mock_service.download.call_args[1]
+            assert _call_kwargs.get("cookies_from_browser") == "floorp:/prof"
+
+    def test_eljuti_skips_auto_with_explicit_flags(self) -> None:
+        """``--kuketoj`` flag → auto-setup skipped."""
+        from typer.testing import CliRunner
+        from A_medio.cli import app
+
+        runner = CliRunner()
+
+        with (
+            patch("A_medio.cli.get_youtube_service") as mock_get,
+            patch("A_medio.cli._load_search_strategy", return_value={}),
+            patch("A_medio.cli._auto_setup_cookies") as mock_auto,
+        ):
+            mock_service = MagicMock()
+            mock_service.is_available.return_value = True
+            mock_service.download.return_value = []
+            mock_get.return_value = mock_service
+
+            runner.invoke(app, [
+                "filmeto", "eljuti",
+                "https://youtu.be/abc",
+                "--kuketoj", "/tmp/cookies.txt",
+            ])
+
+            mock_auto.assert_not_called()
+
+    def test_eljuti_skips_auto_when_cached_strategy(self) -> None:
+        """Cached search strategy → auto-setup skipped."""
+        from typer.testing import CliRunner
+        from A_medio.cli import app
+
+        runner = CliRunner()
+
+        with (
+            patch("A_medio.cli.get_youtube_service") as mock_get,
+            patch("A_medio.cli._load_search_strategy", return_value={"opts": {}}),
+            patch("A_medio.cli._auto_setup_cookies") as mock_auto,
+        ):
+            mock_service = MagicMock()
+            mock_service.is_available.return_value = True
+            mock_service.download.return_value = []
+            mock_get.return_value = mock_service
+
+            runner.invoke(app, [
+                "filmeto", "eljuti",
+                "https://youtu.be/abc",
+            ])
+
+            mock_auto.assert_not_called()
+
+    def test_eljuti_auto_decline_no_cookies(self) -> None:
+        """Auto-setup declined → download proceeds without cookies."""
+        from typer.testing import CliRunner
+        from A_medio.cli import app
+
+        runner = CliRunner()
+
+        with (
+            patch("A_medio.cli.get_youtube_service") as mock_get,
+            patch("A_medio.cli._load_search_strategy", return_value={}),
+            patch("A_medio.cli._auto_setup_cookies", return_value=(None, None)),
+        ):
+            mock_service = MagicMock()
+            mock_service.is_available.return_value = True
+            mock_service.download.return_value = []
+            mock_get.return_value = mock_service
+
+            runner.invoke(app, [
+                "filmeto", "eljuti",
+                "https://youtu.be/abc",
+            ])
+
+            mock_service.download.assert_called_once()
+            _call_kwargs = mock_service.download.call_args[1]
+            assert "cookies_from_browser" not in _call_kwargs
+
+    def test_eljuti_with_output_flag_dir(self) -> None:
+        """``-o /path/to/dir`` passes resolved ``output_dir`` with default ``outtmpl``."""
+        from typer.testing import CliRunner
+        from A_medio.cli import app, _DEFAULT_OUTTMPL
+
+        runner = CliRunner()
+
+        with (
+            patch("A_medio.cli.get_youtube_service") as mock_get,
+            patch("A_medio.cli._load_search_strategy", return_value={}),
+            patch("A_medio.cli._auto_setup_cookies", return_value=(None, None)),
+        ):
+            mock_service = MagicMock()
+            mock_service.is_available.return_value = True
+            mock_service.download.return_value = []
+            mock_get.return_value = mock_service
+
+            runner.invoke(app, [
+                "filmeto", "eljuti",
+                "https://youtu.be/abc",
+                "-o", "/tmp/output_dir",
+            ])
+
+            mock_service.download.assert_called_once()
+            _call_kwargs = mock_service.download.call_args[1]
+            # /tmp/output_dir has >1 part and no ext → treated as directory
+            assert str(_call_kwargs.get("output_dir")) == "/tmp/output_dir"
+            assert _call_kwargs.get("outtmpl") == _DEFAULT_OUTTMPL
+
+    def test_eljuti_with_output_flag_file(self) -> None:
+        """``-o video.mp4`` resolves with correct file template."""
+        from typer.testing import CliRunner
+        from A_medio.cli import app
+
+        runner = CliRunner()
+
+        with (
+            patch("A_medio.cli.get_youtube_service") as mock_get,
+            patch("A_medio.cli._load_search_strategy", return_value={}),
+            patch("A_medio.cli._auto_setup_cookies", return_value=(None, None)),
+        ):
+            mock_service = MagicMock()
+            mock_service.is_available.return_value = True
+            mock_service.download.return_value = []
+            mock_get.return_value = mock_service
+
+            runner.invoke(app, [
+                "filmeto", "eljuti",
+                "https://youtu.be/abc",
+                "-o", "myvideo.mp4",
+            ])
+
+            mock_service.download.assert_called_once()
+            _call_kwargs = mock_service.download.call_args[1]
+            assert _call_kwargs.get("outtmpl") == "myvideo.%(ext)s"

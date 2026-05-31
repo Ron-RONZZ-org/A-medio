@@ -285,6 +285,8 @@ class YouTubeService(MediaService):
             url: YouTube URL to download.
             **opts: Download options:
                 - output_dir: Output directory (default: from config).
+                - outtmpl: yt-dlp output template override (default:
+                  ``"%(title).80s [%(id)s].%(ext)s"``).
                 - resolution: Max video height (e.g. 720, 1080).
                 - audio_only: Extract audio only.
                 - video_only: Video stream only (no audio).
@@ -315,11 +317,14 @@ class YouTubeService(MediaService):
             audio_bitrate=opts.get("audio_bitrate"),
         )
 
+        default_template = "%(title).80s [%(id)s].%(ext)s"
+        outtmpl = opts.get("outtmpl", default_template)
+
         ydl_opts: dict[str, Any] = {
             "quiet": True,
             "no_warnings": True,
             "format": format_sel,
-            "outtmpl": str(output_dir / "%(title).80s [%(id)s].%(ext)s"),
+            "outtmpl": str(output_dir / outtmpl),
             "ignoreerrors": True,
         }
         if opts.get("playlist_end") is not None:

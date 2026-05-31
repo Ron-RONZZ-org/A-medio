@@ -184,6 +184,57 @@ def _auto_setup_cookies() -> tuple[str | None, str | None]:
     return (browser, profile)
 
 
+_DEFAULT_OUTTMPL = "%(title).80s [%(id)s].%(ext)s"
+
+
+def _resolve_output_template(output_path_str: str) -> tuple[Path, str]:
+    """Resolve a user-supplied output path to ``(directory, outtmpl)``.
+
+    Rules (in priority order):
+
+    1. **Existing directory** → use as-is with default template.
+    2. **Ends with ``/``** → create the directory (parents), default template.
+    3. **Non-existent, no suffix, >1 part** → treat as directory, default
+       template.
+    4. **Everything else** → extract parent as directory, use stem as template.
+
+    This matches the legacy
+    ``autish.commands.filmeto._resolve_output_template`` behaviour.
+
+    Args:
+        output_path_str: Raw string from the ``--output``/``-o`` CLI option.
+
+    Returns:
+        ``(resolved_output_dir, outtmpl_string)``
+    """
+    output_path = Path(output_path_str)
+    expanded = output_path.expanduser().resolve()
+
+    # Rule 1: existing directory
+    if expanded.exists() and expanded.is_dir():
+        return expanded, _DEFAULT_OUTTMPL
+
+    # Rule 2: trailing slash → create directory
+    if output_path_str.endswith("/"):
+        expanded.mkdir(parents=True, exist_ok=True)
+        return expanded, _DEFAULT_OUTTMPL
+
+    # Rule 3: non-existent, no suffix, multiple path parts → directory
+    if (
+        not expanded.exists()
+        and output_path.suffix == ""
+        and output_path.name != ""
+        and len(output_path.parts) > 1
+    ):
+        return expanded, _DEFAULT_OUTTMPL
+
+    # Rule 4: treat as file template
+    parent = expanded.parent
+    parent.mkdir(parents=True, exist_ok=True)
+    base = expanded.stem if expanded.suffix else expanded.name
+    return parent, f"{base}.%(ext)s"
+
+
 def _download_with_confirmation(
     url: str,
     youtube: Any,
@@ -385,7 +436,7 @@ def filmeto_serci(
 @filmeto.command("eljuti")
 def filmeto_eljuti(
     url: Optional[str] = typer.Argument(None, help=tr_multi("YouTube URL por elŝuti. Ne necesa kun --csv-dosiero.", "YouTube URL to download. Not needed when using --csv-dosiero.", "URL YouTube à télécharger. Pas nécessaire avec --csv-dosiero.")),
-    output_dir: Optional[str] = typer.Option(None, "--output", "-o", help=tr_multi("Elŝuta dosierujo (defaŭlte: el agordo).", "Download directory (default: from config).", "Répertoire de téléchargement (par défaut: de la config).")),
+    output_path: Optional[str] = typer.Option(None, "--output", "-o", help=tr_multi("Elŝuta vojo (dosierujo aŭ dosiero). Ekz: '/videoj/', 'video.mp4', '/vojo/al/dosierujo/'.", "Download path (directory or file). Ex: '/videos/', 'video.mp4', '/path/to/dir/'.", "Chemin de téléchargement (dossier ou fichier). Ex: '/videos/', 'video.mp4', '/chemin/vers/dossier/'.")),
     resolution: Optional[int] = typer.Option(None, "--difino", "-d", help=tr_multi("Maksimuma video distingivo (ekz. 720, 1080).", "Max video resolution (e.g. 720, 1080).", "Résolution vidéo max (ex: 720, 1080).")),
     audio_only: bool = typer.Option(False, "--audio", "-A", help=tr_multi("Eltiri nur audio.", "Extract audio only.", "Extraire uniquement l'audio.")),
     video_only: bool = typer.Option(False, "--filmeto", "-F", help=tr_multi("Video streamo nur (sen audio).", "Video stream only (no audio).", "Flux vidéo uniquement (sans audio).")),
@@ -448,8 +499,9 @@ def filmeto_eljuti(
     if csv_dosiero is not None:
         # Build initial state from CLI flags
         initial: dict[str, Any] = {}
-        if output_dir is not None:
-            initial["output_dir"] = output_dir
+        if output_path is not None:
+            resolved_dir, _ = _resolve_output_template(output_path)
+            initial["output_dir"] = str(resolved_dir)
         if resolution is not None:
             initial["resolution"] = resolution
         if audio_only:
@@ -481,6 +533,14 @@ def filmeto_eljuti(
             ))
             return
 
+        # Resolve output paths in each CSV spec (directory or file)
+        for spec in specs:
+            raw_vojo = spec.get("output_dir")
+            if raw_vojo and isinstance(raw_vojo, str):
+                resolved_dir, outtmpl = _resolve_output_template(raw_vojo)
+                spec["output_dir"] = str(resolved_dir)
+                spec["outtmpl"] = outtmpl
+
         results = youtube.batch_download(specs)
 
         success_count = sum(1 for r in results if r.success)
@@ -510,9 +570,25 @@ def filmeto_eljuti(
         ))
         return
 
-    download_opts: dict[str, Any] = {
-        "output_dir": output_dir or youtube.get_download_dir(),
-    }
+    # ── Cookie auto-setup (same guard as serci) ──────────────────────────
+    if not kuketoj and not kuketoj_de_retumilo and not _load_search_strategy():
+        browser, profile = _auto_setup_cookies()
+        if browser:
+            kuketoj_de_retumilo = (
+                f"{browser}:{profile}" if profile else browser
+            )
+
+    # ── Resolve output path ────────────────────────────────────────────────
+    if output_path is not None:
+        resolved_dir, outtmpl = _resolve_output_template(output_path)
+        download_opts: dict[str, Any] = {
+            "output_dir": str(resolved_dir),
+            "outtmpl": outtmpl,
+        }
+    else:
+        download_opts: dict[str, Any] = {
+            "output_dir": youtube.get_download_dir(),
+        }
     if resolution is not None:
         download_opts["resolution"] = resolution
     if audio_only:

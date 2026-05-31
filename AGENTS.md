@@ -121,7 +121,8 @@ Two sources supported, passed as yt-dlp options:
 Certificate errors and empty results trigger automatic fallback retries.
 
 **Auto cookie setup on first call:**
-On the first ``serci`` call without ``--kuketoj`` or ``--kuketoj-de-retumilo`` flags:
+On the first ``serci`` or ``eljuti`` (single-URL) call without ``--kuketoj`` or
+``--kuketoj-de-retumilo`` flags:
 1. ``_auto_setup_cookies()`` in ``cli.py`` calls ``_detect_available_browsers()`` to probe all Firefox-style browser roots
 2. If a browser with ``cookies.sqlite`` is found, prompts the user: *"Detected Floorp cookies from ~/.floorp/xxx.default. Use for YouTube?"*
 3. On confirmation, saves the browser (and optional profile path) to persistent config
@@ -144,6 +145,21 @@ Before downloading via ``eljuti`` (non-CSV, non-``--taksi`` mode):
 3. Prompts: *"Continue with download?"* with default Yes
 4. On confirmation, proceeds with the actual download
 5. Non-interactive terminals skip the prompt and download directly
+
+### Output Path Resolution (``--output``/``-o``)
+
+The ``--output``/``-o`` flag accepts file or directory paths and resolves them
+via ``_resolve_output_template()`` in ``cli.py``:
+
+| Input | Behaviour |
+|-------|-----------|
+| ``-o /videos/`` | Existing directory → default filename ``%(title).80s [%(id)s].%(ext)s`` |
+| ``-o video.mp4`` | File path → parent as directory, filename template ``video.%(ext)s`` |
+| ``-o ~/videos/`` | Trailing slash → create directory, default template |
+| ``-o /path/to/newfolder`` | Non-existent, no ext, >1 part → treat as directory, default template |
+| ``-o myvideo`` | Relative, single part, no ext → file template ``myvideo.%(ext)s`` |
+
+When omitted, falls back to configured download directory with default template.
 
 ### Download Estimation
 
