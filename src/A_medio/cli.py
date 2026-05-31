@@ -193,12 +193,14 @@ def _resolve_output_template(output_path_str: str) -> tuple[Path, str]:
 
     1. **Existing directory** → use as-is with default template.
     2. **Ends with ``/``** → create the directory (parents), default template.
-    3. **Non-existent, no suffix, >1 part** → treat as directory, default
+    3. **Non-existent, no suffix, >1 part, parent also non-existent** →
+       treat as directory, default template.
+    4. **Everything else** → extract parent as directory, use stem as
        template.
-    4. **Everything else** → extract parent as directory, use stem as template.
 
-    This matches the legacy
-    ``autish.commands.filmeto._resolve_output_template`` behaviour.
+    Note: when the parent directory exists, a bare last component (no
+    extension) is treated as a filename template — use a trailing ``/``
+    to force directory creation.
 
     Args:
         output_path_str: Raw string from the ``--output``/``-o`` CLI option.
@@ -218,12 +220,15 @@ def _resolve_output_template(output_path_str: str) -> tuple[Path, str]:
         expanded.mkdir(parents=True, exist_ok=True)
         return expanded, _DEFAULT_OUTTMPL
 
-    # Rule 3: non-existent, no suffix, multiple path parts → directory
+    # Rule 3: non-existent, no suffix, multiple path parts, parent doesn't
+    # exist → create directory hierarchy.  If the parent *does* exist the
+    # last component is treated as a filename template (Rule 4).
     if (
         not expanded.exists()
         and output_path.suffix == ""
         and output_path.name != ""
         and len(output_path.parts) > 1
+        and not expanded.parent.exists()
     ):
         return expanded, _DEFAULT_OUTTMPL
 

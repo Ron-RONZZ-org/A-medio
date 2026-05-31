@@ -182,7 +182,8 @@ via ``_resolve_output_template()`` in ``cli.py``:
 | ``-o /videos/`` | Existing directory → default filename ``%(title).80s [%(id)s].%(ext)s`` |
 | ``-o video.mp4`` | File path → parent as directory, filename template ``video.%(ext)s`` |
 | ``-o ~/videos/`` | Trailing slash → create directory, default template |
-| ``-o /path/to/newfolder`` | Non-existent, no ext, >1 part → treat as directory, default template |
+| ``-o /path/to/newfolder`` | Non-existent, no ext, >1 part, parent also non-existent → create directory, default template |
+| ``-o /existing/parent/barename`` | Parent exists, no ext → file template ``barename.%(ext)s`` — use trailing ``/`` for directory |
 | ``-o myvideo`` | Relative, single part, no ext → file template ``myvideo.%(ext)s`` |
 
 When omitted, falls back to configured download directory with default template.

@@ -2066,6 +2066,17 @@ class TestResolveOutputTemplate:
         resolved_dir, outtmpl = _resolve_output_template(str(p))
         assert outtmpl == _DEFAULT_OUTTMPL
 
+    def test_existing_parent_bare_name_is_file_template(self, tmp_path: Path) -> None:
+        """Existing parent dir + bare name → file template, not directory."""
+        from A_medio.cli import _resolve_output_template
+
+        parent = tmp_path / "francaise"
+        parent.mkdir()
+        p = parent / "MK_IDM_SH"
+        resolved_dir, outtmpl = _resolve_output_template(str(p))
+        assert resolved_dir == parent.resolve()
+        assert outtmpl == "MK_IDM_SH.%(ext)s"
+
 
 class TestDownloadWithOuttmpl:
     """``download()`` custom ``outtmpl`` handling."""
@@ -2218,7 +2229,7 @@ class TestEljutiCookieAutoSetup:
             assert "cookies_from_browser" not in _call_kwargs
 
     def test_eljuti_with_output_flag_dir(self) -> None:
-        """``-o /path/to/dir`` passes resolved ``output_dir`` with default ``outtmpl``."""
+        """``-o /path/to/dir/`` with trailing slash creates directory."""
         from typer.testing import CliRunner
         from A_medio.cli import app, _DEFAULT_OUTTMPL
 
@@ -2237,14 +2248,43 @@ class TestEljutiCookieAutoSetup:
             runner.invoke(app, [
                 "filmeto", "eljuti",
                 "https://youtu.be/abc",
-                "-o", "/tmp/output_dir",
+                "-o", "/tmp/output_dir/",
             ])
 
             mock_service.download.assert_called_once()
             _call_kwargs = mock_service.download.call_args[1]
-            # /tmp/output_dir has >1 part and no ext → treated as directory
+            # /tmp/output_dir/ ends with / → treated as directory
             assert str(_call_kwargs.get("output_dir")) == "/tmp/output_dir"
             assert _call_kwargs.get("outtmpl") == _DEFAULT_OUTTMPL
+
+    def test_eljuti_with_output_bare_name_existing_parent(self) -> None:
+        """``-o /existing/parent/barename`` → file template (not directory)."""
+        from typer.testing import CliRunner
+        from A_medio.cli import app
+
+        runner = CliRunner()
+
+        with (
+            patch("A_medio.cli.get_youtube_service") as mock_get,
+            patch("A_medio.cli.get_cookies_from_browser", return_value=None),
+            patch("A_medio.cli._auto_setup_cookies", return_value=(None, None)),
+        ):
+            mock_service = MagicMock()
+            mock_service.is_available.return_value = True
+            mock_service.download.return_value = []
+            mock_get.return_value = mock_service
+
+            runner.invoke(app, [
+                "filmeto", "eljuti",
+                "https://youtu.be/abc",
+                "-o", "/tmp/MK_IDM_SH",
+            ])
+
+            mock_service.download.assert_called_once()
+            _call_kwargs = mock_service.download.call_args[1]
+            # /tmp exists; MK_IDM_SH is bare → file template
+            assert str(_call_kwargs.get("output_dir")) == "/tmp"
+            assert _call_kwargs.get("outtmpl") == "MK_IDM_SH.%(ext)s"
 
     def test_eljuti_with_output_flag_file(self) -> None:
         """``-o video.mp4`` resolves with correct file template."""
