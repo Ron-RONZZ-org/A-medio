@@ -1051,8 +1051,10 @@ class TestDownloadWithCookies:
                 cookies="/tmp/cookies.txt",
             )
 
-            call_opts = mock_create.call_args[0][0]
-            assert call_opts.get("cookiefile") == "/tmp/cookies.txt"
+            # download() now tries multiple cookie candidates; the first
+            # candidate (explicit --kuketoj) must have the cookie file.
+            first_call_opts = mock_create.call_args_list[0][0][0]
+            assert first_call_opts.get("cookiefile") == "/tmp/cookies.txt"
 
     def test_download_with_browser_cookies(self, tmp_path: Path) -> None:
         """Browser cookie spec is passed through to yt-dlp."""
@@ -1071,8 +1073,9 @@ class TestDownloadWithCookies:
                 cookies_from_browser="firefox",
             )
 
-            call_opts = mock_create.call_args[0][0]
-            assert call_opts.get("cookiesfrombrowser") == ("firefox",)
+            # First candidate has explicit browser cookies
+            first_call_opts = mock_create.call_args_list[0][0][0]
+            assert first_call_opts.get("cookiesfrombrowser") == ("firefox",)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1637,6 +1640,18 @@ class TestCookieBrowserCandidatesWithConfig:
             config_profile="/path/to/profile",
         )
         assert result[0] == ("firefox", "/path/to/profile", None, None)
+
+    def test_config_fork_maps_to_base_browser(self) -> None:
+        """Config browser fork (floorp) is mapped to its base (firefox)."""
+        from A_medio.services.youtube._cookie_helpers import _cookie_browser_candidates
+        result = _cookie_browser_candidates(
+            None,
+            config_browser="floorp",
+            config_profile="/home/u/.floorp/abc.default",
+        )
+        # Must be "firefox", NOT "floorp" — yt-dlp only knows base names
+        assert result[0][0] == "firefox"
+        assert result[0][1] == "/home/u/.floorp/abc.default"
 
     def test_explicit_flag_overrides_config(self) -> None:
         """When raw is provided, config params are ignored."""

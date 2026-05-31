@@ -159,14 +159,15 @@ def _cookie_browser_candidates(
     if not raw:
         if config_browser:
             # Use saved config preference instead of falling back to None
-            base = (config_browser,)
+            raw_browser = config_browser.lower().strip()
+            mapped_browser = _BROWSER_FORK_MAP.get(raw_browser, raw_browser)
+            base = (mapped_browser,)
             if config_profile:
-                base = (config_browser, config_profile, None, None)
+                base = (mapped_browser, config_profile, None, None)
             candidates: list[tuple[str, ...] | None] = [base]
-            mapped = _BROWSER_FORK_MAP.get(config_browser.lower(), config_browser.lower())
-            if mapped == "firefox" and not config_profile:
-                for profile in _discover_firefox_profiles(config_browser):
-                    spec = (mapped, profile, None, None)
+            if mapped_browser == "firefox" and not config_profile:
+                for profile in _discover_firefox_profiles(raw_browser):
+                    spec = (mapped_browser, profile, None, None)
                     if spec not in candidates:
                         candidates.append(spec)
             if None not in candidates:
