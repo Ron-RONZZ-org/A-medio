@@ -40,6 +40,21 @@ A medio foto ls                # List photos
 A medio audio ls               # List audio/podcasts
 ```
 
+### Output Path (`--output` / `-o`)
+
+The output path is resolved by priority rules. Use `%(ext)s` as a placeholder for the automatic extension:
+
+| Input | Behaviour |
+|-------|-----------|
+| `-o /videos/` | Existing directory → default filename `%(title).80s [%(id)s].%(ext)s` |
+| `-o /videos/` (trailing slash) | Create directory, default filename |
+| `-o /parent/exists/barename` | Parent dir exists, no extension → file template `barename.%(ext)s` |
+| `-o /parent/missing/newdir` | Parent dir doesn't exist → create directory, default filename |
+| `-o video.mp4` | File path → parent as directory, template `video.%(ext)s` |
+| `-o myvideo` | Single part, no extension → file template `myvideo.%(ext)s` |
+
+**Key point:** When the parent directory exists, a bare name (no extension) is treated as a **filename template**, not a directory. Use a trailing slash (`-o /path/to/dir/`) to explicitly create a directory.
+
 ### YouTube Search Options
 
 | Option | Description |
