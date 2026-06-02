@@ -33,13 +33,16 @@ class TestGetDb:
         assert "fotoj" in table_names
         assert "audioj" in table_names
 
-    def test_youtube_videos_fts_exists(self) -> None:
-        """FTS5 virtual table is created."""
+    def test_youtube_videos_fts_not_created_by_get_db(self) -> None:
+        """FTS5 virtual table is NOT created by get_db() — it is created by
+        CRUDService._ensure_fts() on first YouTubeService access.
+        See _migrate_youtube_videos_fts() for migration of old DBs.
+        """
         db = get_db(Path("/tmp/test_medio_fts.db"))
         rows = db.execute(
             "SELECT name FROM sqlite_master WHERE type='table' AND name='youtube_videos_fts'"
         )
-        assert len(rows) == 1
+        assert len(rows) == 0
 
     def test_youtube_videos_has_uuid_column(self) -> None:
         """youtube_videos table has uuid column for future UUID support."""
