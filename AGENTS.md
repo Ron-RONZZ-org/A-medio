@@ -132,7 +132,7 @@ playlist wrapping from yt-dlp is unwrapped automatically.
 produces files (diff from ``before`` snapshot), it is considered successful and
 the loop breaks. If no files are created and an error was captured, the last
 error is shown. If no files are created without error, ``"Neniu dosiero
-elsxutita."`` is shown.
+elŝutita."`` is shown.
 
 **Important:** Config-saved browser fork names (``floorp``, ``librewolf``, etc.)
 are mapped to their yt-dlp-compatible base name (``firefox``) via
@@ -142,7 +142,7 @@ correctly; the config path in ``_cookie_browser_candidates()`` does the same
 mapping via ``mapped_browser = _BROWSER_FORK_MAP.get(raw_browser, raw_browser)``.
 
 **Auto cookie setup on first call:**
-On the first ``serci`` or ``eljuti`` (single-URL) call without ``--kuketoj`` or
+On the first ``serci`` or ``elsuti`` (single-URL) call without ``--kuketoj`` or
 ``--kuketoj-de-retumilo`` flags **and** no browser saved in config yet:
 1. ``_auto_setup_cookies()`` in ``cli.py`` calls ``_detect_available_browsers()`` to probe all Firefox-style browser roots
 2. If a browser with ``cookies.sqlite`` is found, prompts the user: *"Detected Floorp cookies from ~/.floorp/xxx.default. Use for YouTube?"*
@@ -155,7 +155,7 @@ On the first ``serci`` or ``eljuti`` (single-URL) call without ``--kuketoj`` or
 **Important:** The guard uses ``get_cookies_from_browser()`` (config-stored browser), NOT
 ``_load_search_strategy()``. This prevents a scenario where search succeeds without
 cookies (returning partial metadata) and caches a strategy, which would otherwise
-block the cookie prompt on subsequent ``eljuti`` calls.
+block the cookie prompt on subsequent ``elsuti`` calls.
 
 **Config keys:**
 - ``cookies_from_browser`` (str|None) — browser name saved from auto-setup
@@ -165,7 +165,7 @@ block the cookie prompt on subsequent ``eljuti`` calls.
 
 ### Download Confirmation
 
-Before downloading via ``eljuti`` (non-CSV, non-``--taksi`` mode):
+Before downloading via ``elsuti`` (non-CSV, non-``--taksi`` mode):
 1. ``_download_with_confirmation()`` in ``cli.py`` calls ``youtube.estimate()`` to dry-run and get file sizes
 2. Shows a Rich table with Title, Duration, and Size columns
 3. Prompts: *"Continue with download?"* with default Yes
@@ -190,7 +190,7 @@ When omitted, falls back to configured download directory with default template.
 
 ### Download Estimation
 
-``--taksi`` flag on ``medio filmeto eljuti`` runs a dry-run ``extract_info``
+``--taksi`` flag on ``medio filmeto elsuti`` runs a dry-run ``extract_info``
 and shows estimated item count + total file size without downloading.
 
 ### Search Extras
@@ -199,7 +199,7 @@ and shows estimated item count + total file size without downloading.
 |------|---------|--------|
 | ``--aldona`` / ``-a`` | ``serci`` | Show views, subscribers, duration |
 | ``--playlistoj`` / ``-P`` | ``serci`` | Search for playlists |
-| ``--limo`` / ``-lo`` | ``eljuti`` | Max items from a playlist |
+| ``--limo`` / ``-lo`` | ``elsuti`` | Max items from a playlist |
 
 ### CSV Batch Download
 
@@ -217,7 +217,7 @@ and shows estimated item count + total file size without downloading.
 | `vojo` | `output_dir` | str (path) |
 | `subtitoloj` | `subtitles` | str (comma-separated langs) |
 
-**CLI usage:** ``medio filmeto eljuti --csv-dosiero elsutoj.csv``
+**CLI usage:** ``medio filmeto elsuti --csv-dosiero elsutoj.csv``
 
 CLI flags (``--difino``, ``--audio``, etc.) serve as default values inherited by all CSV rows.
 
@@ -245,7 +245,7 @@ Results are cached in SQLite for offline search via `--local` flag.
 |---------|-------|----------|
 | Cookie/browser auth + auto-setup | ✅ [#6](https://github.com/Ron-RONZZ-org/A-medio/issues/6) | Done |
 | Download confirmation prompt | ✅ (this PR) | Done |
-| `ludi` (play video) | ❌ [#7](https://github.com/Ron-RONZZ-org/A-medio/issues/7) | Won't do — users can ``eljuti --output /tmp && xdg-open`` |
+| `ludi` (play video) | ❌ [#7](https://github.com/Ron-RONZZ-org/A-medio/issues/7) | Won't do — users can ``elsuti --output /tmp && xdg-open`` |
 | Download size estimation | ✅ [#8](https://github.com/Ron-RONZZ-org/A-medio/issues/8) | Done |
 | Search extras (`--aldona`, `--playlistoj`, `--limo`) | ✅ [#9](https://github.com/Ron-RONZZ-org/A-medio/issues/9) | Done |
 

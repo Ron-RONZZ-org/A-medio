@@ -128,7 +128,7 @@ class YouTubeService(MediaService):
         """Search YouTube via yt-dlp with retry strategy."""
         if not self.is_available():
             error(tr_multi(
-                "yt-dlp ne estas instalita. Instalu ghin por uzi sercon.",
+                "yt-dlp ne estas instalita. Instalu ĝin por uzi serĉon.",
                 "yt-dlp is not installed. Install it to use search.",
                 "yt-dlp n'est pas installe. Installez-le pour utiliser la recherche.",
             ))
@@ -225,7 +225,7 @@ class YouTubeService(MediaService):
 
         if last_error:
             error(tr_multi(
-                f"Sercxo fiaskis: {last_error}",
+                f"Serĉo fiaskis: {last_error}",
                 f"Search failed: {last_error}",
                 f"Echec de recherche: {last_error}",
             ))
@@ -351,7 +351,7 @@ class YouTubeService(MediaService):
         """
         if not self.is_available():
             error(tr_multi(
-                "yt-dlp ne estas instalita. Instalu ghin por elsxuti.",
+                "yt-dlp ne estas instalita. Instalu ĝin por elŝuti.",
                 "yt-dlp is not installed. Install it to download.",
                 "yt-dlp n'est pas installe. Installez-le pour telecharger.",
             ))
@@ -407,20 +407,20 @@ class YouTubeService(MediaService):
 
         if not created and last_error:
             error(tr_multi(
-                f"Elsxuto fiaskis: {last_error}",
+                f"Elŝuto fiaskis: {last_error}",
                 f"Download failed: {last_error}",
                 f"Telechargement echoue: {last_error}",
             ))
 
         if created:
             info(tr_multi(
-                f"Elsxutis {len(created)} dosiero(j)n al {output_dir}",
+                f"Elŝutis {len(created)} dosiero(j)n al {output_dir}",
                 f"Downloaded {len(created)} file(s) to {output_dir}",
                 f"Telecharge {len(created)} fichier(s) vers {output_dir}",
             ))
         else:
             info(tr_multi(
-                "Neniu dosiero elsxutita.",
+                "Neniu dosiero elŝutita.",
                 "No files downloaded.",
                 "Aucun fichier telecharge.",
             ))

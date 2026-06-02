@@ -390,10 +390,10 @@ class TestYouTubeService:
 
 
 class TestFilmetoEljutiCLI:
-    """``medio filmeto eljuti`` CLI command."""
+    """``medio filmeto elsuti`` CLI command."""
 
-    def test_eljuti_requires_url_or_csv(self) -> None:
-        """Running eljuti without URL and without --csv-dosiero shows error."""
+    def test_elsuti_requires_url_or_csv(self) -> None:
+        """Running elsuti without URL and without --csv-dosiero shows error."""
         from typer.testing import CliRunner
 
         from A_medio.cli import app
@@ -405,13 +405,13 @@ class TestFilmetoEljutiCLI:
             mock_service.is_available.return_value = True
             mock_get.return_value = mock_service
 
-            result = runner.invoke(app, ["filmeto", "eljuti"])
+            result = runner.invoke(app, ["filmeto", "elsuti"])
 
             assert result.exit_code == 0
             assert "Mankas URL" in result.stdout or "Missing URL" in result.stdout
 
-    def test_eljuti_with_url(self) -> None:
-        """Running eljuti with URL invokes download."""
+    def test_elsuti_with_url(self) -> None:
+        """Running elsuti with URL invokes download."""
         from typer.testing import CliRunner
 
         from A_medio.cli import app
@@ -430,7 +430,7 @@ class TestFilmetoEljutiCLI:
             mock_get.return_value = mock_service
 
             result = runner.invoke(app, [
-                "filmeto", "eljuti",
+                "filmeto", "elsuti",
                 "https://youtu.be/abc123",
             ])
 
@@ -440,7 +440,7 @@ class TestFilmetoEljutiCLI:
                 output_dir=mock_service.get_download_dir(),
             )
 
-    def test_eljuti_with_options(self) -> None:
+    def test_elsuti_with_options(self) -> None:
         """CLI passes download options correctly."""
         from typer.testing import CliRunner
 
@@ -459,7 +459,7 @@ class TestFilmetoEljutiCLI:
             mock_get.return_value = mock_service
 
             result = runner.invoke(app, [
-                "filmeto", "eljuti",
+                "filmeto", "elsuti",
                 "https://youtu.be/abc123",
                 "--difino", "1080",
                 "--audio",
@@ -475,8 +475,8 @@ class TestFilmetoEljutiCLI:
                 subtitles="eo,en",
             )
 
-    def test_eljuti_calls_ensure_installed(self) -> None:
-        """eljuti calls ensure_installed when yt-dlp unavailable."""
+    def test_elsuti_calls_ensure_installed(self) -> None:
+        """elsuti calls ensure_installed when yt-dlp unavailable."""
         from typer.testing import CliRunner
 
         from A_medio.cli import app
@@ -493,15 +493,15 @@ class TestFilmetoEljutiCLI:
             mock_get.return_value = mock_service
 
             result = runner.invoke(app, [
-                "filmeto", "eljuti",
+                "filmeto", "elsuti",
                 "https://youtu.be/abc123",
             ])
 
             mock_service.ensure_installed.assert_called_once()
             assert not mock_service.download.called
 
-    def test_eljuti_proceeds_when_install_accepted(self) -> None:
-        """eljuti proceeds with download when ensure_installed returns True."""
+    def test_elsuti_proceeds_when_install_accepted(self) -> None:
+        """elsuti proceeds with download when ensure_installed returns True."""
         from typer.testing import CliRunner
 
         from A_medio.cli import app
@@ -520,7 +520,7 @@ class TestFilmetoEljutiCLI:
             mock_get.return_value = mock_service
 
             result = runner.invoke(app, [
-                "filmeto", "eljuti",
+                "filmeto", "elsuti",
                 "https://youtu.be/abc123",
             ])
 
@@ -748,7 +748,7 @@ class TestBatchDownload:
 
 
 class TestFilmetoEljutiCSV:
-    """``medio filmeto eljuti --csv-dosiero`` CLI command."""
+    """``medio filmeto elsuti --csv-dosiero`` CLI command."""
 
     def test_csv_flag_accepted(self, tmp_path: Path) -> None:
         """CLI accepts --csv-dosiero flag."""
@@ -768,7 +768,7 @@ class TestFilmetoEljutiCSV:
             mock_get.return_value = mock_service
 
             result = runner.invoke(app, [
-                "filmeto", "eljuti",
+                "filmeto", "elsuti",
                 "--csv-dosiero", str(csv_file),
             ])
 
@@ -793,7 +793,7 @@ class TestFilmetoEljutiCSV:
             mock_get.return_value = mock_service
 
             result = runner.invoke(app, [
-                "filmeto", "eljuti",
+                "filmeto", "elsuti",
                 "--csv-dosiero", str(csv_file),
                 "--difino", "720",
                 "--audio",
@@ -817,7 +817,7 @@ class TestFilmetoEljutiCSV:
             mock_get.return_value = mock_service
 
             result = runner.invoke(app, [
-                "filmeto", "eljuti",
+                "filmeto", "elsuti",
                 "--csv-dosiero", str(tmp_path / "nonexistent.csv"),
             ])
 
@@ -848,7 +848,7 @@ class TestFilmetoEljutiCSV:
             mock_get.return_value = mock_service
 
             result = runner.invoke(app, [
-                "filmeto", "eljuti",
+                "filmeto", "elsuti",
                 "--csv-dosiero", str(csv_file),
             ])
 
@@ -874,7 +874,7 @@ class TestFilmetoEljutiCSV:
 
             # No URL argument — should work because --csv-dosiero is provided
             result = runner.invoke(app, [
-                "filmeto", "eljuti",
+                "filmeto", "elsuti",
                 "--csv-dosiero", str(csv_file),
             ])
 
@@ -1229,8 +1229,8 @@ class TestCLICookieFlags:
             _, kwargs = mock_service.search.call_args
             assert kwargs.get("cookies_from_browser") == "floorp"
 
-    def test_eljuti_with_kuketoj(self) -> None:
-        """--kuketoj on eljuti passes cookies to download."""
+    def test_elsuti_with_kuketoj(self) -> None:
+        """--kuketoj on elsuti passes cookies to download."""
         from typer.testing import CliRunner
 
         from A_medio.cli import app
@@ -1245,7 +1245,7 @@ class TestCLICookieFlags:
             mock_get.return_value = mock_service
 
             result = runner.invoke(app, [
-                "filmeto", "eljuti",
+                "filmeto", "elsuti",
                 "https://youtu.be/abc",
                 "--kuketoj", "/tmp/cookies.txt",
             ])
@@ -1482,9 +1482,9 @@ class TestCLISearchExtras:
 
 
 class TestCLIDownloadExtras:
-    """CLI --taksi, --limo flags on eljuti."""
+    """CLI --taksi, --limo flags on elsuti."""
 
-    def test_eljuti_with_limo(self) -> None:
+    def test_elsuti_with_limo(self) -> None:
         """--limo passes playlist_end to download."""
         from typer.testing import CliRunner
 
@@ -1500,7 +1500,7 @@ class TestCLIDownloadExtras:
             mock_get.return_value = mock_service
 
             result = runner.invoke(app, [
-                "filmeto", "eljuti",
+                "filmeto", "elsuti",
                 "https://youtu.be/abc",
                 "--limo", "5",
             ])
@@ -1509,7 +1509,7 @@ class TestCLIDownloadExtras:
             _, kwargs = mock_service.download.call_args
             assert kwargs.get("playlist_end") == 5
 
-    def test_eljuti_with_taksi(self) -> None:
+    def test_elsuti_with_taksi(self) -> None:
         """--taksi calls estimate() instead of download()."""
         from typer.testing import CliRunner
 
@@ -1531,7 +1531,7 @@ class TestCLIDownloadExtras:
             mock_get.return_value = mock_service
 
             result = runner.invoke(app, [
-                "filmeto", "eljuti",
+                "filmeto", "elsuti",
                 "https://youtu.be/abc",
                 "--taksi",
             ])
@@ -2124,9 +2124,9 @@ class TestDownloadWithOuttmpl:
 
 
 class TestEljutiCookieAutoSetup:
-    """Cookie auto-setup on ``eljuti`` first call."""
+    """Cookie auto-setup on ``elsuti`` first call."""
 
-    def test_eljuti_triggers_auto_on_first_call(self) -> None:
+    def test_elsuti_triggers_auto_on_first_call(self) -> None:
         """No flags + no config browser → auto-setup called, cookies pass to download."""
         from typer.testing import CliRunner
         from A_medio.cli import app
@@ -2144,7 +2144,7 @@ class TestEljutiCookieAutoSetup:
             mock_get.return_value = mock_service
 
             runner.invoke(app, [
-                "filmeto", "eljuti",
+                "filmeto", "elsuti",
                 "https://youtu.be/abc",
             ])
 
@@ -2152,7 +2152,7 @@ class TestEljutiCookieAutoSetup:
             _call_kwargs = mock_service.download.call_args[1]
             assert _call_kwargs.get("cookies_from_browser") == "floorp:/prof"
 
-    def test_eljuti_skips_auto_with_explicit_flags(self) -> None:
+    def test_elsuti_skips_auto_with_explicit_flags(self) -> None:
         """``--kuketoj`` flag → auto-setup skipped."""
         from typer.testing import CliRunner
         from A_medio.cli import app
@@ -2170,7 +2170,7 @@ class TestEljutiCookieAutoSetup:
             mock_get.return_value = mock_service
 
             runner.invoke(app, [
-                "filmeto", "eljuti",
+                "filmeto", "elsuti",
                 "https://youtu.be/abc",
                 "--kuketoj", "/tmp/cookies.txt",
             ])
@@ -2178,7 +2178,7 @@ class TestEljutiCookieAutoSetup:
             mock_auto.assert_not_called()
             mock_get_cookies.assert_not_called()
 
-    def test_eljuti_skips_auto_when_config_has_browser(self) -> None:
+    def test_elsuti_skips_auto_when_config_has_browser(self) -> None:
         """Config-saved browser → auto-setup skipped."""
         from typer.testing import CliRunner
         from A_medio.cli import app
@@ -2196,13 +2196,13 @@ class TestEljutiCookieAutoSetup:
             mock_get.return_value = mock_service
 
             runner.invoke(app, [
-                "filmeto", "eljuti",
+                "filmeto", "elsuti",
                 "https://youtu.be/abc",
             ])
 
             mock_auto.assert_not_called()
 
-    def test_eljuti_auto_decline_no_cookies(self) -> None:
+    def test_elsuti_auto_decline_no_cookies(self) -> None:
         """Auto-setup declined → download proceeds without cookies."""
         from typer.testing import CliRunner
         from A_medio.cli import app
@@ -2220,7 +2220,7 @@ class TestEljutiCookieAutoSetup:
             mock_get.return_value = mock_service
 
             runner.invoke(app, [
-                "filmeto", "eljuti",
+                "filmeto", "elsuti",
                 "https://youtu.be/abc",
             ])
 
@@ -2228,7 +2228,7 @@ class TestEljutiCookieAutoSetup:
             _call_kwargs = mock_service.download.call_args[1]
             assert "cookies_from_browser" not in _call_kwargs
 
-    def test_eljuti_with_output_flag_dir(self) -> None:
+    def test_elsuti_with_output_flag_dir(self) -> None:
         """``-o /path/to/dir/`` with trailing slash creates directory."""
         from typer.testing import CliRunner
         from A_medio.cli import app, _DEFAULT_OUTTMPL
@@ -2246,7 +2246,7 @@ class TestEljutiCookieAutoSetup:
             mock_get.return_value = mock_service
 
             runner.invoke(app, [
-                "filmeto", "eljuti",
+                "filmeto", "elsuti",
                 "https://youtu.be/abc",
                 "-o", "/tmp/output_dir/",
             ])
@@ -2257,7 +2257,7 @@ class TestEljutiCookieAutoSetup:
             assert str(_call_kwargs.get("output_dir")) == "/tmp/output_dir"
             assert _call_kwargs.get("outtmpl") == _DEFAULT_OUTTMPL
 
-    def test_eljuti_with_output_bare_name_existing_parent(self) -> None:
+    def test_elsuti_with_output_bare_name_existing_parent(self) -> None:
         """``-o /existing/parent/barename`` → file template (not directory)."""
         from typer.testing import CliRunner
         from A_medio.cli import app
@@ -2275,7 +2275,7 @@ class TestEljutiCookieAutoSetup:
             mock_get.return_value = mock_service
 
             runner.invoke(app, [
-                "filmeto", "eljuti",
+                "filmeto", "elsuti",
                 "https://youtu.be/abc",
                 "-o", "/tmp/MK_IDM_SH",
             ])
@@ -2286,7 +2286,7 @@ class TestEljutiCookieAutoSetup:
             assert str(_call_kwargs.get("output_dir")) == "/tmp"
             assert _call_kwargs.get("outtmpl") == "MK_IDM_SH.%(ext)s"
 
-    def test_eljuti_with_output_flag_file(self) -> None:
+    def test_elsuti_with_output_flag_file(self) -> None:
         """``-o video.mp4`` resolves with correct file template."""
         from typer.testing import CliRunner
         from A_medio.cli import app
@@ -2304,7 +2304,7 @@ class TestEljutiCookieAutoSetup:
             mock_get.return_value = mock_service
 
             runner.invoke(app, [
-                "filmeto", "eljuti",
+                "filmeto", "elsuti",
                 "https://youtu.be/abc",
                 "-o", "myvideo.mp4",
             ])
