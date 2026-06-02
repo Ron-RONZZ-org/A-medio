@@ -4,9 +4,19 @@ from __future__ import annotations
 
 import json
 import re
+import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+
+from rich.progress import (
+    BarColumn,
+    DownloadColumn,
+    Progress,
+    TextColumn,
+    TimeRemainingColumn,
+    TransferSpeedColumn,
+)
 
 from A import error, info, tr_multi
 from A.core.service import CRUDService
@@ -381,6 +391,38 @@ class YouTubeService(MediaService):
             base_ydl_opts["playlistend"] = int(opts["playlist_end"])
         base_ydl_opts.update(build_subtitle_opts(opts.get("subtitles")))
 
+        # ── Rich progress bar (interactive terminals only) ──────────────
+        progress: Progress | None = None
+        _task_id: int | None = None
+
+        if sys.stdout.isatty():
+            progress = Progress(
+                TextColumn("{task.description}"),
+                BarColumn(),
+                TextColumn("{task.percentage:>3.0f}%"),
+                DownloadColumn(),
+                TransferSpeedColumn(),
+                TimeRemainingColumn(),
+                transient=True,
+            )
+            progress.start()
+            _task_id = progress.add_task("Elŝutado", total=None)
+
+            def _yt_progress_hook(d: dict) -> None:
+                if d["status"] == "downloading":
+                    total = d.get("total_bytes") or d.get("total_bytes_estimate")
+                    if total:
+                        progress.update(_task_id, total=int(total))
+                        progress.update(_task_id, completed=d.get("downloaded_bytes", 0))
+                    filename = d.get("filename", "")
+                    if filename:
+                        progress.update(_task_id, description=Path(filename).name)
+                elif d["status"] == "finished":
+                    total = d.get("total_bytes") or 0
+                    progress.update(_task_id, completed=int(total), total=int(total or 1))
+
+            base_ydl_opts["progress_hooks"] = [_yt_progress_hook]
+
         candidates = self._build_cookie_candidates(
             base_ydl_opts,
             cookies=opts.get("cookies"),
@@ -390,17 +432,21 @@ class YouTubeService(MediaService):
         before = {p for p in output_dir.iterdir()} if output_dir.exists() else set()
         last_error: Exception | None = None
 
-        for ydl_opts in candidates:
-            try:
-                with self._wrapper.create_ydl(ydl_opts) as ydl:
-                    ydl.extract_info(url, download=True)
+        try:
+            for ydl_opts in candidates:
+                try:
+                    with self._wrapper.create_ydl(ydl_opts) as ydl:
+                        ydl.extract_info(url, download=True)
 
-                # Check if anything was actually created
-                after = {p for p in output_dir.iterdir()}
-                if after - before:
-                    break  # success
-            except get_download_error() as exc:
-                last_error = exc
+                    # Check if anything was actually created
+                    after = {p for p in output_dir.iterdir()}
+                    if after - before:
+                        break  # success
+                except get_download_error() as exc:
+                    last_error = exc
+        finally:
+            if progress:
+                progress.stop()
 
         after = {p for p in output_dir.iterdir()}
         created = sorted(after - before, key=lambda p: p.name)
