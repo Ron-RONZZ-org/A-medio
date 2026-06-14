@@ -9,8 +9,6 @@ from A.core.backup_targets import BackupTarget
 from A.data.base import SQLiteDB, backup_db, health_check
 
 
-_DATA_DIR = data_dir() / "medio"
-
 # ──────────────────────────────────────────────────────────────────────────────
 # YouTube videos (cached search results)
 #
@@ -127,13 +125,13 @@ _IDX_AUDIOJ_TITOLO = "CREATE INDEX IF NOT EXISTS idx_audioj_titolo ON audioj(tit
 
 def ensure_dirs() -> None:
     """Ensure data directory exists."""
-    _DATA_DIR.mkdir(parents=True, exist_ok=True)
+    (data_dir() / "medio").mkdir(parents=True, exist_ok=True)
 
 
 def get_db(path: Path | None = None) -> SQLiteDB:
     """Get database connection with health check and backup."""
     if path is None:
-        path = _DATA_DIR / "medio.db"
+        path = data_dir() / "medio" / "medio.db"
     ensure_dirs()
     if not health_check(path):
         from A.data.base import repair_db as _repair
@@ -212,7 +210,7 @@ def get_backup_targets() -> list[BackupTarget]:
     """Return backup targets for A-medio."""
     return [
         BackupTarget(
-            path=_DATA_DIR / "medio.db",
+            path=data_dir() / "medio" / "medio.db",
             category="data",
             module="medio",
             label="Medio database",

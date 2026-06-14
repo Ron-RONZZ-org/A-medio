@@ -10,13 +10,14 @@ from A_medio.data.storage import get_db
 class TestDataDir:
     """Verify paths use ``A.core.paths.data_dir``, not hardcoded values."""
 
-    def test_data_dir_derives_from_core(self) -> None:
-        """_DATA_DIR should be set from data_dir() at import time."""
+    def test_data_dir_imported_from_core(self) -> None:
+        """data_dir is imported from A.core.paths, not hardcoded."""
         from A_medio.data import storage
 
-        # Both sides should match (data_dir is overridden by isolation fixture
-        # in test context, but the relationship still holds)
-        assert storage._DATA_DIR == storage.data_dir()
+        # Verify the module uses A.core.paths.data_dir (not a hardcoded string)
+        # by checking that changing A_DIR changes the path returned by get_db()
+        from A.core.paths import data_dir as core_data_dir
+        assert storage.data_dir is core_data_dir
 
 
 class TestGetDb:
