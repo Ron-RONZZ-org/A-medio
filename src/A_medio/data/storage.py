@@ -9,8 +9,6 @@ from A.core.backup_targets import BackupTarget
 from A.data.base import SQLiteDB, backup_db, health_check
 
 
-_DATA_DIR = data_dir() / "medio"
-
 # ──────────────────────────────────────────────────────────────────────────────
 # YouTube videos (cached search results)
 #
@@ -40,13 +38,20 @@ CREATE TABLE IF NOT EXISTS youtube_videos (
 );
 """
 
+# NOTE: FTS table creation is handled by CRUDService._ensure_fts()
+# (via A.data.search.build_fts_schema) which includes uuid UNINDEXED column.
+# The constant below is kept for reference only — do NOT execute it directly
+# as it would create a schema without the uuid column, breaking _index_fts().
+# See _migrate_youtube_videos_fts() for migration of existing DBs.
 _CREATE_YOUTUBE_VIDEOS_FTS = """
 CREATE VIRTUAL TABLE IF NOT EXISTS youtube_videos_fts USING fts5(
+    uuid UNINDEXED,
     title,
     description,
     author,
-    content='youtube_videos',
-    content_rowid='id'
+    content=youtube_videos,
+    content_rowid=rowid,
+    tokenize=unicode61
 );
 """
 
@@ -120,13 +125,13 @@ _IDX_AUDIOJ_TITOLO = "CREATE INDEX IF NOT EXISTS idx_audioj_titolo ON audioj(tit
 
 def ensure_dirs() -> None:
     """Ensure data directory exists."""
-    _DATA_DIR.mkdir(parents=True, exist_ok=True)
+    (data_dir() / "medio").mkdir(parents=True, exist_ok=True)
 
 
 def get_db(path: Path | None = None) -> SQLiteDB:
     """Get database connection with health check and backup."""
     if path is None:
-        path = _DATA_DIR / "medio.db"
+        path = data_dir() / "medio" / "medio.db"
     ensure_dirs()
     if not health_check(path):
         from A.data.base import repair_db as _repair
@@ -137,7 +142,6 @@ def get_db(path: Path | None = None) -> SQLiteDB:
     # Create tables
     stmts = [
         _CREATE_YOUTUBE_VIDEOS,
-        _CREATE_YOUTUBE_VIDEOS_FTS,
         _CREATE_FILMETOJ,
         _CREATE_FOTOJ,
         _CREATE_AUDIOJ,
@@ -150,6 +154,10 @@ def get_db(path: Path | None = None) -> SQLiteDB:
 
     # Migration: add uuid column to youtube_videos for existing databases
     _migrate_youtube_videos_uuid(db)
+
+    # Migration: drop-and-recreate FTS table if it's missing uuid UNINDEXED
+    # (created by an older version of storage.py)
+    _migrate_youtube_videos_fts(db)
 
     return db
 
@@ -166,11 +174,43 @@ def _migrate_youtube_videos_uuid(db: SQLiteDB) -> None:
         pass  # Table might not exist yet
 
 
+def _migrate_youtube_videos_fts(db: SQLiteDB) -> None:
+    """Drop and recreate ``youtube_videos_fts`` if it lacks ``uuid UNINDEXED``.
+
+    Older versions of ``storage.py`` created the FTS table without a ``uuid``
+    column, which causes ``build_index_sql()`` in ``search.py`` to fail when
+    it tries to INSERT into the ``uuid`` column.  FTS5 virtual tables cannot
+    be ALTERED, so we drop and recreate the table.
+    """
+    fts_table = "youtube_videos_fts"
+    try:
+        row = db.execute_one(
+            "SELECT sql FROM sqlite_master"
+            " WHERE type='table' AND name=?",
+            (fts_table,),
+        )
+    except Exception:
+        return  # Table doesn't exist yet — nothing to migrate
+
+    if not row or not row.get("sql"):
+        return
+
+    schema = row["sql"]
+    # If the schema already includes uuid UNINDEXED, nothing to do.
+    if "uuid" in schema:
+        return
+
+    # Drop the old FTS table (loses the index; will be rebuilt by
+    # CRUDService._ensure_fts() on next YouTubeService access).
+    db.execute(f"DROP TABLE IF EXISTS {fts_table}")
+    db.execute("VACUUM")  # reclaim space immediately
+
+
 def get_backup_targets() -> list[BackupTarget]:
     """Return backup targets for A-medio."""
     return [
         BackupTarget(
-            path=_DATA_DIR / "medio.db",
+            path=data_dir() / "medio" / "medio.db",
             category="data",
             module="medio",
             label="Medio database",

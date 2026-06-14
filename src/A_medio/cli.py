@@ -33,9 +33,12 @@ app = typer.Typer(
 filmeto = typer.Typer(
     name="filmeto",
     help=tr_multi(
-        "Filmeto — video management (YouTube, local).",
-        "Filmeto — video management (YouTube, local).",
-        "Filmeto — gestion vidéo (YouTube, local).",
+        "Filmeto — video management (YouTube, local). "
+        "Config key: filmeto.default_output (set via A core config).",
+        "Filmeto — video management (YouTube, local). "
+        "Config key: filmeto.default_output (set via A core config).",
+        "Filmeto — gestion vidéo (YouTube, local). "
+        "Clé config : filmeto.default_output (définir via config A core).",
     ),
     no_args_is_help=True,
     context_settings={"help_option_names": ["-h", "--help", "--helpo"]},
@@ -176,7 +179,7 @@ def _auto_setup_cookies() -> tuple[str | None, str | None]:
     # Save to persistent config for future calls
     set_cookies_from_browser(browser, profile)
     info(tr_multi(
-        f"Konservis {browser} kiel defauxltan retumilon por kuketoj.",
+        f"Konservis {browser} kiel defaŭltan retumilon por kuketoj.",
         f"Saved {browser} as default cookie browser.",
         f"{browser} enregistré comme navigateur de cookies par défaut.",
     ))
@@ -265,7 +268,7 @@ def _download_with_confirmation(
     estimate = youtube.estimate(url, **opts)
     if estimate is None or not estimate.items:
         error(tr_multi(
-            "Ne povis taksi elsxuton. Nuligita.",
+            "Ne povis taksi elŝuton. Nuligita.",
             "Could not estimate download. Cancelled.",
             "Impossible d'estimer le téléchargement. Annulé.",
         ))
@@ -273,7 +276,7 @@ def _download_with_confirmation(
 
     # Build preview table
     table = Table(title=tr_multi(
-        "Elsxuta resumo",
+        "Elŝuta resumo",
         "Download summary",
         "Résumé du téléchargement",
     ))
@@ -307,7 +310,7 @@ def _download_with_confirmation(
 
     if not confirm_action(
         tr_multi(
-            "Ĉu daŭrigi elsxuton?",
+            "Ĉu daŭrigi elŝuton?",
             "Continue with download?",
             "Continuer le téléchargement ?",
         ),
@@ -320,6 +323,11 @@ def _download_with_confirmation(
         ))
         return []
 
+    info(tr_multi(
+        "Elŝutado komenciĝas...",
+        "Starting download...",
+        "Téléchargement en cours...",
+    ))
     return youtube.download(url, **opts)
 
 
@@ -437,8 +445,8 @@ def filmeto_serci(
                 info(f"   [dim]{' | '.join(parts)}[/dim]")
 
 
-@filmeto.command("eljuti")
-def filmeto_eljuti(
+@filmeto.command("elsuti")
+def filmeto_elsuti(
     url: Optional[str] = typer.Argument(None, help=tr_multi("YouTube URL por elŝuti. Ne necesa kun --csv-dosiero.", "YouTube URL to download. Not needed when using --csv-dosiero.", "URL YouTube à télécharger. Pas nécessaire avec --csv-dosiero.")),
     output_path: Optional[str] = typer.Option(None, "--output", "-o", help=tr_multi(
         "Elŝuta vojo. Reguloj: ekzistanta dosierujo → defaŭlta nomo; finiĝas per / → krei dosierujon, defaŭlta nomo; /ekzistanta/patron/nomo → nomo.%(ext)s; vojo.mp4 → vojo.%(ext)s. Uzu / por devigi dosierujon.",
@@ -483,17 +491,20 @@ def filmeto_eljuti(
     Use --taksi to preview estimated size before downloading.
     Use --limo to limit how many items are fetched from a playlist.
 
+    Default download directory: config key ``filmeto.default_output``
+    (set via ``~/.config/A/config.toml`` or ``A uzanto modifi``).
+
     If downloads fail due to YouTube blocking, try --kuketoj or --kuketoj-de-retumilo.
 
     Examples:
-        medio filmeto eljuti https://www.youtube.com/watch?v=...
-        medio filmeto eljuti https://youtu.be/... --output /path/to/dir
-        medio filmeto eljuti https://youtu.be/... --audio
-        medio filmeto eljuti https://youtu.be/... --difino 1080 --subtitoloj eo,en
-        medio filmeto eljuti https://youtu.be/... --taksi
-        medio filmeto eljuti https://youtu.be/... --limo 5
-        medio filmeto eljuti https://youtu.be/... --kuketoj /tmp/cookies.txt
-        medio filmeto eljuti --csv-dosiero elsutoj.csv
+        medio filmeto elsuti https://www.youtube.com/watch?v=...
+        medio filmeto elsuti https://youtu.be/... --output /path/to/dir
+        medio filmeto elsuti https://youtu.be/... --audio
+        medio filmeto elsuti https://youtu.be/... --difino 1080 --subtitoloj eo,en
+        medio filmeto elsuti https://youtu.be/... --taksi
+        medio filmeto elsuti https://youtu.be/... --limo 5
+        medio filmeto elsuti https://youtu.be/... --kuketoj /tmp/cookies.txt
+        medio filmeto elsuti --csv-dosiero elsutoj.csv
     """
     from A_medio.services.youtube import parse_csv_rows
 
@@ -572,9 +583,9 @@ def filmeto_eljuti(
     # ── Single URL mode ───────────────────────────────────────────────────
     if not url:
         error(tr_multi(
-            "Mankas URL. Uzu: medio filmeto eljuti <URL> aŭ --csv-dosiero <dosiero>.",
-            "Missing URL. Use: medio filmeto eljuti <URL> or --csv-dosiero <file>.",
-            "URL manquante. Utilisez : medio filmeto eljuti <URL> ou --csv-dosiero <fichier>.",
+            "Mankas URL. Uzu: medio filmeto elsuti <URL> aŭ --csv-dosiero <dosiero>.",
+            "Missing URL. Use: medio filmeto elsuti <URL> or --csv-dosiero <file>.",
+            "URL manquante. Utilisez : medio filmeto elsuti <URL> ou --csv-dosiero <fichier>.",
         ))
         return
 

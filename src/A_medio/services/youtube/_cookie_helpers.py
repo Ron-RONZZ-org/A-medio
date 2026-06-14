@@ -232,7 +232,7 @@ def _cookie_help_text() -> str:
         "  1) Trovu vian retumilan profilon.\n"
         f"     Floorp (Linux): {home}/.floorp/<profilo>\n"
         f"     Firefox (Linux): {home}/.mozilla/firefox/<profilo>\n"
-        "     Konsilo: legu profiles.ini por gxusta profilo-nomo.\n"
+         "     Konsilo: legu profiles.ini por ĝusta profilo-nomo.\n"
         "  2) Testu kun:\n"
         "     --kuketoj-de-retumilo floorp\n"
         "     au --kuketoj-de-retumilo floorp:/plena/vojo/al/profilo\n"

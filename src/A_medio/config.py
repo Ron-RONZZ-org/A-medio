@@ -1,15 +1,23 @@
 """Plugin-level configuration for A-medio.
 
-Uses ``A.core.config.ConfigSchema`` for per-module config storage.
-TOML path: ``~/.config/A/A-medio/config.toml``
+Reads from ``[filmeto]`` section in the central config
+(``~/.config/A/config.toml``) or falls back to ``[A.settings]`` dot-notation
+and finally the legacy per-module TOML.
 """
 
 from __future__ import annotations
 
 from typing import Any
 
-from A.core.config import ConfigSchema
+from A.core.config import get_module_setting, set_module_setting, ConfigSchema, register_module_defaults
 from A.core.paths import data_dir
+
+# Register filmeto defaults so they appear as commented keys in config.toml
+register_module_defaults("filmeto", {
+    "default_output":         (str(data_dir() / "filmetoj"), "Default download directory"),
+    "cookies_from_browser":   ("", "Browser name for cookie extraction (floorp, firefox)"),
+    "cookies_from_browser_profile": ("", "Specific browser profile path for cookies"),
+})
 
 __all__ = [
     "get_setting",
@@ -21,13 +29,12 @@ __all__ = [
     "get_cookies_from_browser_profile",
 ]
 
-_DEFAULT_DOWNLOAD_DIR = str(data_dir() / "filmetoj")
-
-_schema = ConfigSchema("A-medio", {
+# Legacy per-module schema (fallback for existing installs)
+_legacy_schema = ConfigSchema("A-medio", {
     "download_dir": {
         "type": "str",
-        "default": _DEFAULT_DOWNLOAD_DIR,
-        "help": "Default download directory",
+        "default": None,
+        "help": "Default download directory (computed from data_dir dynamically)",
     },
     "cookies_from_browser": {
         "type": "str",
@@ -41,51 +48,70 @@ _schema = ConfigSchema("A-medio", {
     },
 })
 
+_MODULE = "filmeto"
+_SENTINEL = object()
+
+
+def _read_legacy(key: str, default: Any = None) -> Any:
+    """Fallback: read from legacy per-module TOML if central config absent."""
+    central = get_module_setting(_MODULE, key, _SENTINEL)
+    if central is not _SENTINEL:
+        return central
+    cfg = _legacy_schema.load()
+    return cfg.get(key, default)
+
 
 def get_setting(key: str, default: Any = None) -> Any:
-    """Read a plugin setting from per-module TOML config.
+    """Read a plugin setting from central config (or legacy).
+
+    Checks ``[filmeto]`` in ``~/.config/A/config.toml`` first, then
+    falls back to ``[A.settings]`` dot-notation and legacy per-module TOML.
 
     Args:
-        key: Setting name.
+        key: Setting name (e.g. ``"default_output"``).
         default: Value returned when the key is missing.
 
     Returns:
         The stored value, or *default*.
     """
-    cfg = _schema.load()
-    return cfg.get(key, default)
+    return _read_legacy(key, default)
 
 
 def set_setting(key: str, value: Any) -> None:
-    """Write a plugin setting to per-module TOML config.
+    """Write a plugin setting to the ``[filmeto]`` section.
 
-    Persisted to ``~/.config/A/A-medio/config.toml``.
+    Persisted to ``[filmeto]`` in ``~/.config/A/config.toml``.
+    Cleans up any legacy keys with the same name.
 
     Args:
         key: Setting name.
-        value: Value to store.  Must be TOML-serialisable (str, bool,
-            int, float, list, dict).
+        value: Value to store (must be TOML-serialisable).
     """
-    cfg = _schema.load()
-    cfg[key] = value
-    _schema.save(cfg)
+    set_module_setting(_MODULE, key, value)
 
 
 def get_download_dir() -> str:
     """Return the default download directory path.
 
-    Defaults to ``<data_dir>/filmetoj``.
+    Reads ``default_output`` from ``[filmeto]`` section.
+    Falls back to legacy ``download_dir``, then ``<data_dir>/filmetoj``.
     """
-    return get_setting("download_dir", _schema.default("download_dir"))
+    central = get_module_setting(_MODULE, "default_output", _SENTINEL)
+    if central is not _SENTINEL:
+        return central
+    legacy = _legacy_schema.load().get("download_dir")
+    if legacy is not None:
+        return legacy
+    return str(data_dir() / "filmetoj")
 
 
 def set_download_dir(path: str) -> None:
-    """Set the default download directory.
+    """Set the default download directory (writes to ``[filmeto]``).
 
     Args:
         path: Absolute path to the download folder.
     """
-    set_setting("download_dir", path)
+    set_module_setting(_MODULE, "default_output", path)
 
 
 def get_cookies_from_browser() -> str | None:
@@ -94,7 +120,7 @@ def get_cookies_from_browser() -> str | None:
     Returns:
         Browser name (floorp, firefox, etc.) or ``None`` if not set.
     """
-    return get_setting("cookies_from_browser")
+    return _read_legacy("cookies_from_browser")
 
 
 def set_cookies_from_browser(browser: str | None, profile: str | None = None) -> None:
@@ -102,10 +128,10 @@ def set_cookies_from_browser(browser: str | None, profile: str | None = None) ->
 
     Args:
         browser: Browser name (floorp, firefox, etc.) or ``None`` to clear.
-        profile: Optional specific profile path. When ``None``, yt-dlp auto-selects.
+        profile: Optional specific profile path.
     """
-    set_setting("cookies_from_browser", browser)
-    set_setting("cookies_from_browser_profile", profile)
+    set_module_setting(_MODULE, "cookies_from_browser", browser)
+    set_module_setting(_MODULE, "cookies_from_browser_profile", profile)
 
 
 def get_cookies_from_browser_profile() -> str | None:
@@ -114,4 +140,4 @@ def get_cookies_from_browser_profile() -> str | None:
     Returns:
         Profile directory path, or ``None`` if not set.
     """
-    return get_setting("cookies_from_browser_profile")
+    return _read_legacy("cookies_from_browser_profile")

@@ -35,7 +35,7 @@ A medio filmeto serci "news" --local  # Search local cache only
 
 # Other commands
 A medio filmeto ludi <url>     # Play video
-A medio filmeto eljuti <url>   # Download video
+A medio filmeto elsuti <url>   # Download video
 A medio foto ls                # List photos
 A medio audio ls               # List audio/podcasts
 ```

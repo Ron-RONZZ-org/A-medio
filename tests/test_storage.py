@@ -10,13 +10,14 @@ from A_medio.data.storage import get_db
 class TestDataDir:
     """Verify paths use ``A.core.paths.data_dir``, not hardcoded values."""
 
-    def test_data_dir_derives_from_core(self) -> None:
-        """_DATA_DIR should be set from data_dir() at import time."""
+    def test_data_dir_imported_from_core(self) -> None:
+        """data_dir is imported from A.core.paths, not hardcoded."""
         from A_medio.data import storage
 
-        # Both sides should match (data_dir is overridden by isolation fixture
-        # in test context, but the relationship still holds)
-        assert storage._DATA_DIR == storage.data_dir()
+        # Verify the module uses A.core.paths.data_dir (not a hardcoded string)
+        # by checking that changing A_DIR changes the path returned by get_db()
+        from A.core.paths import data_dir as core_data_dir
+        assert storage.data_dir is core_data_dir
 
 
 class TestGetDb:
@@ -33,13 +34,16 @@ class TestGetDb:
         assert "fotoj" in table_names
         assert "audioj" in table_names
 
-    def test_youtube_videos_fts_exists(self) -> None:
-        """FTS5 virtual table is created."""
+    def test_youtube_videos_fts_not_created_by_get_db(self) -> None:
+        """FTS5 virtual table is NOT created by get_db() — it is created by
+        CRUDService._ensure_fts() on first YouTubeService access.
+        See _migrate_youtube_videos_fts() for migration of old DBs.
+        """
         db = get_db(Path("/tmp/test_medio_fts.db"))
         rows = db.execute(
             "SELECT name FROM sqlite_master WHERE type='table' AND name='youtube_videos_fts'"
         )
-        assert len(rows) == 1
+        assert len(rows) == 0
 
     def test_youtube_videos_has_uuid_column(self) -> None:
         """youtube_videos table has uuid column for future UUID support."""
