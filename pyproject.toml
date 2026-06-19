@@ -22,7 +22,6 @@ dev = [
 ]
 
 [project.entry-points."A.commands"]
-medio = "A_medio.cli:app"
 filmeto = "A_medio.cli:filmeto"
 foto = "A_medio.cli:foto"
 audio = "A_medio.cli:audio"
