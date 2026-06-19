@@ -462,7 +462,7 @@ class TestFilmetoEljutiCLI:
                 "filmeto", "elsuti",
                 "https://youtu.be/abc123",
                 "--difino", "1080",
-                "--audio",
+                "--sono",
                 "--subtitoloj", "eo,en",
             ])
 
@@ -796,7 +796,7 @@ class TestFilmetoEljutiCSV:
                 "filmeto", "elsuti",
                 "--csv-dosiero", str(csv_file),
                 "--difino", "720",
-                "--audio",
+                "--sono",
             ])
 
             assert result.exit_code == 0

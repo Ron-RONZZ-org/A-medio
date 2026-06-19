@@ -350,9 +350,9 @@ def filmeto_kuketoj_helpo() -> None:
 def filmeto_serci(
     query: str,
     limit: int = 10,
-    filter_field: Optional[str] = typer.Option(None, "--filter", "-f", help=tr_multi("Filtrila kampo (titolo, priskribo, aŭtoro)", "Filter field (title, description, author)", "Champ de filtrage (titre, description, auteur)")),
+    filter_field: Optional[str] = typer.Option(None, "--filtrilo", "-f", help=tr_multi("Filtrila kampo (titolo, priskribo, aŭtoro)", "Filter field (title, description, author)", "Champ de filtrage (titre, description, auteur)")),
     regex: Optional[str] = typer.Option(None, "--regex", "-r", help=tr_multi("Regex ŝablono por kongruigi", "Regex pattern to match", "Motif Regex à faire correspondre")),
-    local_only: bool = typer.Option(False, "--local", "-l", help=tr_multi("Serĉi nur lokan kaŝmemoron", "Search local cache only", "Rechercher uniquement le cache local")),
+    local_only: bool = typer.Option(False, "--loka", "-l", help=tr_multi("Serĉi nur lokan kaŝmemoron", "Search local cache only", "Rechercher uniquement le cache local")),
     aldona: bool = typer.Option(False, "--aldona", "-a", help=tr_multi("Montri krominformojn (vidadoj,abonantoj).", "Show extra info (views, subscribers).", "Afficher les infos supplémentaires (vues, abonnés).")),
     playlistoj: bool = typer.Option(False, "--playlistoj", "-P", help=tr_multi("Serĉi ludlistojn anstataŭ videojn.", "Search playlists instead of videos.", "Rechercher des playlists au lieu de vidéos.")),
     kuketoj: Optional[str] = typer.Option(None, "--kuketoj", help=tr_multi("Vojo al cookies.txt por YouTube aŭtentigo.", "Path to cookies.txt for YouTube authentication.", "Chemin vers cookies.txt pour l'authentification YouTube.")),
@@ -448,13 +448,13 @@ def filmeto_serci(
 @filmeto.command("elsuti")
 def filmeto_elsuti(
     url: Optional[str] = typer.Argument(None, help=tr_multi("YouTube URL por elŝuti. Ne necesa kun --csv-dosiero.", "YouTube URL to download. Not needed when using --csv-dosiero.", "URL YouTube à télécharger. Pas nécessaire avec --csv-dosiero.")),
-    output_path: Optional[str] = typer.Option(None, "--output", "-o", help=tr_multi(
+    output_path: Optional[str] = typer.Option(None, "--eligo", "-o", help=tr_multi(
         "Elŝuta vojo. Reguloj: ekzistanta dosierujo → defaŭlta nomo; finiĝas per / → krei dosierujon, defaŭlta nomo; /ekzistanta/patron/nomo → nomo.%(ext)s; vojo.mp4 → vojo.%(ext)s. Uzu / por devigi dosierujon.",
         "Download path. Rules: existing dir → default name; trailing / → create dir, default name; /existing/parent/name → name.%(ext)s; path.mp4 → path.%(ext)s. Add trailing / to force directory.",
         "Chemin de téléchargement. Règles : dossier existant → nom par défaut ; se termine par / → créer dossier, nom par défaut ; /parent/existant/nom → nom.%(ext)s ; chemin.mp4 → chemin.%(ext)s. Ajoutez / pour forcer un dossier.",
     )),
     resolution: Optional[int] = typer.Option(None, "--difino", "-d", help=tr_multi("Maksimuma video distingivo (ekz. 720, 1080).", "Max video resolution (e.g. 720, 1080).", "Résolution vidéo max (ex: 720, 1080).")),
-    audio_only: bool = typer.Option(False, "--audio", "-A", help=tr_multi("Eltiri nur audio.", "Extract audio only.", "Extraire uniquement l'audio.")),
+    audio_only: bool = typer.Option(False, "--sono", "-A", help=tr_multi("Eltiri nur audio.", "Extract audio only.", "Extraire uniquement l'audio.")),
     video_only: bool = typer.Option(False, "--filmeto", "-F", help=tr_multi("Video streamo nur (sen audio).", "Video stream only (no audio).", "Flux vidéo uniquement (sans audio).")),
     audio_bitrate: Optional[int] = typer.Option(None, "--sonkvalito", "-s", help=tr_multi("Maksimuma sonkvalito en kbps.", "Max audio bitrate in kbps.", "Débit audio max en kbps.")),
     subtitles: Optional[str] = typer.Option(
